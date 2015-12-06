@@ -246,6 +246,63 @@ def dda4(pt, dir, step):
 			yield abs(y)
 			y += delt_y
 
+def dda5(pt, dir, step, tilemap):
+	m = dir[1] / dir[0]
+
+	if dir[0] >= 0:
+		if dir[1] < 0: #1
+			dx = 1
+			dy = -1
+		else: #4
+			dx = 1
+			dy = 1
+	else:
+		if dir[1] < 0: #2
+			dx = -1
+			dy = -1
+		else: #3
+			dx = -1
+			dy = 1
+
+	delt_x = math.sqrt(math.pow(step, 2) + math.pow(m * step, 2))
+	delt_y = math.sqrt(math.pow(step, 2) + math.pow(1/m * step, 2))
+
+	if dx > 0:
+		side_x = abs(step - pt[0] % step) * delt_x / step + 1
+	else:
+		side_x = abs(pt[0] % step) * delt_x / step + 1
+
+	if dy > 0:
+		side_y = abs(step - pt[1] % step) * delt_y / step + 1
+	else:
+		side_y = abs(pt[1] % step) * delt_y / step + 1
+
+	x = side_x
+	y = side_y
+	if delt_y > 1000:
+		y = 999
+	if delt_x > 1000:
+		x = 999
+
+	collisions = []
+
+	#while x >= 0 and x < 384 and y >= 0 and y < 384:
+	#while abs(x) < 1000 and abs(y) < 1000:
+	while x < 1000 or y < 1000:
+		if x < y:
+			hit = pt + dir * abs(x)
+			x += delt_x
+		else:
+			hit = pt + dir * abs(y)
+			y += delt_y
+
+		tile = tilemap.get_tile_px(hit[0], hit[1])
+		collisions.append(hit)
+		if tile > 0:
+			break
+
+	return np.array(collisions)
+
 def get_collision_point(tilemap, ray):
 	for pt in dda(ray[0], ray[0] + ray[1] * 200):
 		if tilemap.get_tile_px(pt[0], pt[1]) > 0:
@@ -293,19 +350,50 @@ def render_camera(camera):
 def render_scan(camera, tilemap):
 	scan_line_x = 0
 
+	wall_rects = []
+	ceil_rects = []
+	floor_rects = []
+
+	# rects = []
+	# for i in range(590):
+	# 	rects.append((i * 2, 10, 2, 100))
+	# renderer.fill(rects, 0xFFFFFFFF)
+	# renderer.fill(rects, 0xFFFFFFFF)
+	# return
+
+	height_factor = 64 * np.linalg.norm(camera.dir)
+
 	for v_ray in camera.rays():
-		ray = (camera.pos, v_ray)
 
 		#renderer.draw_line((int(ray[0][0]), int(ray[0][1]), int(ray[1][0]), int(ray[1][1])), 0xFFF0000)
 		#collision, tile = get_collision_point4(tilemap, ray)
 
-		floors = []
+		collisions = dda5(camera.pos, v_ray, 64, tilemap)
+		if len(collisions) > 0:
+			angle = np.deg2rad(camera.angle) - np.arctan2(v_ray[1], v_ray[0])
+			heights = (height_factor / (np.linalg.norm((collisions - camera.pos), axis=1) * np.cos(angle))).astype(int)
+
+			floor_rects += [(400 + scan_line_x, 240, 2, h / 2) for h in heights[:-1] if np.abs(h) < 1000]
+			ceil_rects += [(400 + scan_line_x, 240 - h / 2, 2, h / 2) for h in heights[:-1] if np.abs(h) < 1000]
+			if np.abs(heights[-1]) < 1000:
+				wall_rects += [(400 + scan_line_x, 240 - heights[-1] / 2, 2, heights[-1])]
+
+			"""for i in range(0, len(collisions) - 1):
+				f_height = 64 * np.linalg.norm(camera.dir) / (np.linalg.norm(collisions[i][0] - camera.pos) * np.cos(angle))
+				if (np.abs(f_height) < 1000):
+					floor_rects.append((400 + scan_line_x, 240, 2, int(f_height / 2)))
+
+			w_height = 64 * np.linalg.norm(camera.dir) / (np.linalg.norm(collisions[len(collisions) - 1][0] - camera.pos) * np.cos(angle))
+			if (np.abs(w_height) < 1000):
+				wall_rects.append((400 + scan_line_x, 240 - int(w_height / 2), 2, int(w_height)))"""
+
+		"""floors = []
 		collision = None
 		tile = None
-		for dist in dda4(ray[0], ray[1], 64):
-			pt = ray[0] + ray[1] * dist
+		for dist in dda4(camera.pos, v_ray, 64):
+			pt = camera.pos + v_ray * dist
 			tile = tilemap.get_tile_px(pt[0], pt[1])
-			f_pt = ray[0] + ray[1] * dist
+			f_pt = camera.pos + v_ray * dist
 			f_tile = tilemap.get_tile_px(f_pt[0], f_pt[1])
 			if tile > 0:
 				collision = pt
@@ -315,18 +403,27 @@ def render_scan(camera, tilemap):
 
 		if collision != None:
 			#renderer.fill((int(collision[0] - 2), int(collision[1] - 2), 4, 4), 0xFF0000FF)
-			angle = np.deg2rad(camera.angle) - np.arctan2(ray[1][1], ray[1][0])
+			angle = np.deg2rad(camera.angle) - np.arctan2(v_ray[1], v_ray[0])
 
 			for f in floors:
 				f_height = 64 * np.linalg.norm(camera.dir) / (np.linalg.norm(f[0] - camera.pos) * np.cos(angle))
 				if (np.abs(f_height) < 1000):
-					renderer.fill((400 + scan_line_x, 240, 2, int(f_height / 2)), PALETTE[f[1]])
+					floor_rects.append((400 + scan_line_x, 240, 2, int(f_height / 2)))
+					#renderer.fill((400 + scan_line_x, 240, 2, int(f_height / 2)), PALETTE[f[1]])
 
 			height = 64 * np.linalg.norm(camera.dir) / (np.linalg.norm(collision - camera.pos) * np.cos(angle))
 			if (np.abs(height) < 1000):
-				renderer.fill((400 + scan_line_x, 240 - int(height / 2), 2, int(height)), PALETTE[tile])
+				wall_rects.append((400 + scan_line_x, 240 - int(height / 2), 2, int(height)))
+				#renderer.fill((400 + scan_line_x, 240 - int(height / 2), 2, int(height)), PALETTE[tile])"""
 
 		scan_line_x += 2
+
+	if len(floor_rects) > 0:
+		renderer.fill(floor_rects, 0x80808080)
+	if len(ceil_rects) > 0:
+		renderer.fill(ceil_rects, 0x40404040)
+	if len(wall_rects) > 0:
+		renderer.fill(wall_rects, 0xFFFFFFFF)
 
 window = sdl2.ext.Window("Hello World!", size=(1280, 480))
 window.show()
