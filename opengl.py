@@ -15,12 +15,12 @@ surface = None
 renderer = None
 context = None
 shaderProgram = None
-VAO_VERTEX = None
 textures = []
 running = True
 
 test_quads = []
 
+VAO_VERTEX = -1
 ATTR_POSITION = -1
 ATTR_TEXCOORDS = -1
 ATTR_TEXUNIT = -1
@@ -115,14 +115,15 @@ def render():
 
 	GL.glBindVertexArray(VAO_VERTEX)
 	for quad in test_quads:
-		GL.glBindTexture(GL.GL_TEXTURE_2D, quad.texture)
 		GL.glUniformMatrix4fv(ATTR_MODELVIEWMAT, 1, GL.GL_TRUE, quad.model_view_mat)
 		GL.glUniformMatrix4fv(ATTR_VERTPROJMAT, 1, GL.GL_TRUE, quad.vert_proj_mat)
 		GL.glUniformMatrix4fv(ATTR_TEXPROJMAT, 1, GL.GL_TRUE, quad.tex_proj_mat)
+		GL.glBindTexture(GL.GL_TEXTURE_2D, quad.texture)
 		GL.glBindBuffer(GL.GL_ARRAY_BUFFER, quad.VBO)
 		GL.glVertexAttribPointer(ATTR_POSITION, 3, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
 		GL.glDrawArrays(GL.GL_TRIANGLES, 0, len(quad.vertices))
 		GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+		GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
 	GL.glBindVertexArray(0)
 
 	sdl2.SDL_GL_SwapWindow(window.window)
