@@ -15,12 +15,11 @@ surface = None
 renderer = None
 context = None
 shaderProgram = None
-VAO = None
-VBO = None
-texture = None
+VAO_VERTEX = None
+textures = []
 running = True
 
-test_quad = None
+test_quads = []
 
 ATTR_POSITION = -1
 ATTR_TEXCOORDS = -1
@@ -112,22 +111,24 @@ def render():
 	#wireframe
 	#GL.glPolygonMode(GL.GL_FRONT, GL.GL_LINE)
 
-	GL.glUniformMatrix4fv(ATTR_MODELVIEWMAT, 1, GL.GL_TRUE, test_quad.model_view_mat)
-	GL.glUniformMatrix4fv(ATTR_VERTPROJMAT, 1, GL.GL_TRUE, test_quad.vert_proj_mat)
-	GL.glUniformMatrix4fv(ATTR_TEXPROJMAT, 1, GL.GL_TRUE, test_quad.tex_proj_mat)
-
 	GL.glActiveTexture(GL.GL_TEXTURE0)
-	GL.glBindTexture(GL.GL_TEXTURE_2D, texture)
 
-	GL.glBindVertexArray(VAO)
-	GL.glDrawArrays(GL.GL_TRIANGLES, 0, 6)
+	GL.glBindVertexArray(VAO_VERTEX)
+	for quad in test_quads:
+		GL.glBindTexture(GL.GL_TEXTURE_2D, quad.texture)
+		GL.glUniformMatrix4fv(ATTR_MODELVIEWMAT, 1, GL.GL_TRUE, quad.model_view_mat)
+		GL.glUniformMatrix4fv(ATTR_VERTPROJMAT, 1, GL.GL_TRUE, quad.vert_proj_mat)
+		GL.glUniformMatrix4fv(ATTR_TEXPROJMAT, 1, GL.GL_TRUE, quad.tex_proj_mat)
+		GL.glBindBuffer(GL.GL_ARRAY_BUFFER, quad.VBO)
+		GL.glVertexAttribPointer(ATTR_POSITION, 3, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
+		GL.glDrawArrays(GL.GL_TRIANGLES, 0, len(quad.vertices))
+		GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
 	GL.glBindVertexArray(0)
 
 	sdl2.SDL_GL_SwapWindow(window.window)
 
-
 class Quad:
-	def __init__(self, ul, ur, br, bl, model_view_mat):
+	def __init__(self, ul, ur, br, bl, model_view_mat, texture):
 		old = np.array([
 			[-1.0,  1.0, 0.0],
 			[ 1.0,  1.0, 0.0],
@@ -145,8 +146,15 @@ class Quad:
 		self.model_view_mat = model_view_mat
 		self.vert_proj_mat = make_proj_mat(old, new)
 		self.tex_proj_mat = np.dot(scale_bias, make_proj_mat(new, old))
-		#self.VBO = np.array([ul, ur, br, ul, br, bl], dtype=np.float32).flatten()
-		self.VBO = np.array([old[0], old[1], old[2], old[0], old[2], old[3]], dtype=np.float32).flatten()
+
+		self.vertices = np.array([old[0], old[1], old[2], old[0], old[2], old[3]], dtype=np.float32).flatten()
+		self.VBO = GL.glGenBuffers(1)
+		GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.VBO)
+		GL.glBufferData(GL.GL_ARRAY_BUFFER, self.vertices.nbytes, self.vertices, GL.GL_STATIC_DRAW)
+		GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+
+		self.texture = texture
+
 
 def make_model_view_mat(x, y, z, sx, sy, sz):
 	model_view_mat = np.array([
@@ -205,15 +213,14 @@ def make_proj_mat(old, new):
 	return proj_mat
 
 def run():
-	global VAO
-	global VBO
+	global VAO_VERTEX
 	global ATTR_POSITION
 	global ATTR_TEXCOORDS
 	global ATTR_TEXUNIT
 	global ATTR_MODELVIEWMAT
 	global ATTR_VERTPROJMAT
 	global ATTR_TEXPROJMAT
-	global texture
+	global textures
 	global test_quad
 
 	init()
@@ -245,58 +252,61 @@ def run():
 		0.0, 0.0
 		], dtype=np.float32)
 
-	VAO = GL.glGenVertexArrays(1)
-	GL.glBindVertexArray(VAO)
+	ATTR_MODELVIEWMAT = GL.glGetUniformLocation(shaderProgram, "v_modelViewMat")
+	ATTR_VERTPROJMAT = GL.glGetUniformLocation(shaderProgram, "v_vertProjMat")
+	ATTR_TEXPROJMAT = GL.glGetUniformLocation(shaderProgram, "v_texProjMat")
+	ATTR_TEXUNIT = GL.glGetUniformLocation(shaderProgram, "f_texUnit")
 
-	test_quad = Quad(
-		[-1.0,  1.0, 0.0],
-		[ 1.0,  0.3, 0.0],
-		[ 1.0, -0.3, 0.0],
-		[-1.0, -1.0, 0.0],
-		make_model_view_mat(-0.2, 0.0, 0.0, 0.8, 0.8, 1.0))
-
-	VBO_positions = GL.glGenBuffers(1)
-	GL.glBindBuffer(GL.GL_ARRAY_BUFFER, VBO_positions)
-	GL.glBufferData(GL.GL_ARRAY_BUFFER, test_quad.VBO.nbytes, test_quad.VBO, GL.GL_STATIC_DRAW)
-
-	VBO_tex_coords = GL.glGenBuffers(1)
-	GL.glBindBuffer(GL.GL_ARRAY_BUFFER, VBO_tex_coords)
-	GL.glBufferData(GL.GL_ARRAY_BUFFER, tex_coords.nbytes, tex_coords, GL.GL_STATIC_DRAW)
-
+	VAO_VERTEX = GL.glGenVertexArrays(1)
+	GL.glBindVertexArray(VAO_VERTEX)
 	ATTR_POSITION = GL.glGetAttribLocation(shaderProgram, "v_position")
 	GL.glEnableVertexAttribArray(ATTR_POSITION)
-	GL.glBindBuffer(GL.GL_ARRAY_BUFFER, VBO_positions)
-	GL.glVertexAttribPointer(ATTR_POSITION, 3, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
+	GL.glBindVertexArray(0)
+
+	#VBO_positions = GL.glGenBuffers(1)
+	#GL.glBindBuffer(GL.GL_ARRAY_BUFFER, VBO_positions)
+	#GL.glBufferData(GL.GL_ARRAY_BUFFER, test_quads[0].VBO.nbytes, test_quads[0].VBO, GL.GL_STATIC_DRAW)
+
+	#VBO_tex_coords = GL.glGenBuffers(1)
+	#GL.glBindBuffer(GL.GL_ARRAY_BUFFER, VBO_tex_coords)
+	#GL.glBufferData(GL.GL_ARRAY_BUFFER, tex_coords.nbytes, tex_coords, GL.GL_STATIC_DRAW)
 
 	# ATTR_TEXCOORDS = GL.glGetAttribLocation(shaderProgram, "v_texCoords")
 	# GL.glEnableVertexAttribArray(ATTR_TEXCOORDS)
 	# GL.glBindBuffer(GL.GL_ARRAY_BUFFER, VBO_tex_coords)
 	# GL.glVertexAttribPointer(ATTR_TEXCOORDS, 2, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
 
-	ATTR_TEXUNIT = GL.glGetUniformLocation(shaderProgram, "f_texUnit")
-	GL.glProgramUniform1i(shaderProgram, ATTR_TEXUNIT, 0)
-
-	ATTR_MODELVIEWMAT = GL.glGetUniformLocation(shaderProgram, "v_modelViewMat")
-
-	ATTR_VERTPROJMAT = GL.glGetUniformLocation(shaderProgram, "v_vertProjMat")
-
-	ATTR_TEXPROJMAT = GL.glGetUniformLocation(shaderProgram, "v_texProjMat")
-
-	GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
-	GL.glBindVertexArray(0)
-
 	texture_surface = sdl2.ext.load_image("C:\\dev\\raycast\\textures.png")
 	sprite_factory = sdl2.ext.SpriteFactory(sprite_type=sdl2.ext.SOFTWARE, renderer=renderer)
 	test_sprite = sprite_factory.create_software_sprite((64, 64))
-	sdl2.SDL_BlitSurface(texture_surface, sdl2.SDL_Rect(64, 0, 64, 64), test_sprite.surface, sdl2.SDL_Rect(0, 0, 64, 64))
+	for i in range(8):
+		sdl2.SDL_BlitSurface(
+			texture_surface, sdl2.SDL_Rect(i * 64, 0, 64, 64),
+			test_sprite.surface, sdl2.SDL_Rect(0, 0, 64, 64))
+		pixels = sdl2.ext.pixels2d(test_sprite)
+		pixels = np.copy(pixels)
 
-	pixels = sdl2.ext.pixels2d(test_sprite)
-	pixels = np.copy(pixels)
-	texture = GL.glGenTextures(1)
-	GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 1)
-	GL.glBindTexture(GL.GL_TEXTURE_2D, texture)
-	GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA, 64, 64, 0, GL.GL_BGRA, GL.GL_UNSIGNED_INT_8_8_8_8_REV, np.flipud(pixels.T).reshape(64*64))
-	GL.glGenerateMipmap(GL.GL_TEXTURE_2D)
+		texture = GL.glGenTextures(1)
+		GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 1)
+		GL.glBindTexture(GL.GL_TEXTURE_2D, texture)
+		GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA, 64, 64, 0, GL.GL_BGRA, GL.GL_UNSIGNED_INT_8_8_8_8_REV, np.flipud(pixels.T).reshape(64*64))
+		GL.glGenerateMipmap(GL.GL_TEXTURE_2D)
+		GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
+
+		textures.append(texture)
+
+	test_quads.append(Quad(
+		[-1.0,  1.0, 0.0],
+		[ 1.0,  0.3, 0.0],
+		[ 1.0, -0.3, 0.0],
+		[-1.0, -1.0, 0.0],
+		make_model_view_mat(-0.6, 0.0, 0.0, 0.4, 0.4, 1.0), textures[1]))
+	test_quads.append(Quad(
+		[-1.0,  0.3, 0.0],
+		[ 1.0,  1.0, 0.0],
+		[ 1.0, -1.0, 0.0],
+		[-1.0, -0.3, 0.0],
+		make_model_view_mat(0.6, 0.0, 0.0, 0.4, 0.4, 1.0), textures[3]))
 
 	while running:
 		now = sdl2.timer.SDL_GetTicks()
