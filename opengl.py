@@ -20,11 +20,14 @@ VBO = None
 texture = None
 running = True
 
+test_quad = None
+
 ATTR_POSITION = -1
 ATTR_TEXCOORDS = -1
 ATTR_TEXUNIT = -1
 ATTR_MODELVIEWMAT = -1
-ATTR_PROJMAT = -1
+ATTR_VERTPROJMAT = -1
+ATTR_TEXPROJMAT = -1
 
 def init():
 	global window
@@ -57,13 +60,15 @@ def init():
 		layout (location=1) in vec2 v_texCoords;
 
 		uniform mat4 v_modelViewMat;
-		uniform mat4 v_projMat;
+		uniform mat4 v_vertProjMat;
+		uniform mat4 v_texProjMat;
 		noperspective out vec4 f_texCoords;
 
 		void main()
 		{
-			f_texCoords = v_projMat * vec4(v_position.x, v_position.y, 0, 1);
-			gl_Position = v_modelViewMat * vec4(v_position, 1);
+			vec4 projPos = v_vertProjMat * vec4(v_position, 1);
+			f_texCoords = v_texProjMat * (projPos / projPos.w);
+			gl_Position = v_modelViewMat * projPos;
 		}
 		""", GL.GL_VERTEX_SHADER)
 
@@ -107,22 +112,9 @@ def render():
 	#wireframe
 	#GL.glPolygonMode(GL.GL_FRONT, GL.GL_LINE)
 
-	modelViewMat = np.array([
-		[ 1.0, 0.0, 0.0, -1.0],
-		[ 0.0, 1.0, 0.0,  0.0],
-		[ 0.0, 0.0, 1.0,  0.0],
-		[ 0.0, 0.0, 0.0,  1.0]
-		])
-	GL.glUniformMatrix4fv(ATTR_MODELVIEWMAT, 1, GL.GL_TRUE, modelViewMat)
-
-	scale_bias = np.array([
-		[0.5, 0.0, 0.0, 0.5],
-		[0.0, 0.5, 0.0, 0.5],
-		[0.0, 0.0, 1.0, 0.0],
-		[0.0, 0.0, 0.0, 1.0]
-		])
-	proj_mat = np.dot(scale_bias, test_make_transform())
-	GL.glUniformMatrix4fv(ATTR_PROJMAT, 1, GL.GL_TRUE, proj_mat)
+	GL.glUniformMatrix4fv(ATTR_MODELVIEWMAT, 1, GL.GL_TRUE, test_quad.model_view_mat)
+	GL.glUniformMatrix4fv(ATTR_VERTPROJMAT, 1, GL.GL_TRUE, test_quad.vert_proj_mat)
+	GL.glUniformMatrix4fv(ATTR_TEXPROJMAT, 1, GL.GL_TRUE, test_quad.tex_proj_mat)
 
 	GL.glActiveTexture(GL.GL_TEXTURE0)
 	GL.glBindTexture(GL.GL_TEXTURE_2D, texture)
@@ -133,7 +125,39 @@ def render():
 
 	sdl2.SDL_GL_SwapWindow(window.window)
 
-def test_make_transform():
+
+class Quad:
+	def __init__(self, ul, ur, br, bl, model_view_mat):
+		old = np.array([
+			[-1.0,  1.0, 0.0],
+			[ 1.0,  1.0, 0.0],
+			[ 1.0, -1.0, 0.0],
+			[-1.0, -1.0, 0.0]
+			], dtype=np.float32)
+		new = np.array([ul, ur, br, bl], dtype=np.float32)
+		scale_bias = np.array([
+			[0.5, 0.0, 0.0, 0.5],
+			[0.0, 0.5, 0.0, 0.5],
+			[0.0, 0.0, 1.0, 0.0],
+			[0.0, 0.0, 0.0, 1.0]
+			], dtype=np.float32)
+
+		self.model_view_mat = model_view_mat
+		self.vert_proj_mat = make_proj_mat(old, new)
+		self.tex_proj_mat = np.dot(scale_bias, make_proj_mat(new, old))
+		#self.VBO = np.array([ul, ur, br, ul, br, bl], dtype=np.float32).flatten()
+		self.VBO = np.array([old[0], old[1], old[2], old[0], old[2], old[3]], dtype=np.float32).flatten()
+
+def make_model_view_mat(x, y, z, sx, sy, sz):
+	model_view_mat = np.array([
+		[ sx, 0.0, 0.0,  x ],
+		[0.0,  sy, 0.0,  y ],
+		[0.0, 0.0,  sz,  z ],
+		[0.0, 0.0, 0.0, 1.0]
+		])
+	return model_view_mat
+
+def make_proj_mat(old, new):
 	"""
 	Using four corner points of quad, solve for the coefficients m1-m8 in system:
 
@@ -147,19 +171,19 @@ def test_make_transform():
     s/w, t/w = projected texture coordinates
 	"""
 
-	old = np.array([
-		[-1.0,  1.0, 0.0],
-		[ 1.0,  0.3, 0.0],
-		[ 1.0, -0.3, 0.0],
-		[-1.0, -1.0, 0.0]
-		], dtype=np.float32)
+	# old = np.array([
+	# 	[-1.0,  1.0, 0.0],
+	# 	[ 1.0,  0.3, 0.0],
+	# 	[ 1.0, -0.3, 0.0],
+	# 	[-1.0, -1.0, 0.0]
+	# 	], dtype=np.float32)
 
-	new = np.array([
-		[-1.0,  1.0, 0.0],
-		[ 1.0,  1.0, 0.0],
-		[ 1.0, -1.0, 0.0],
-		[-1.0, -1.0, 0.0]
-		], dtype=np.float32)
+	# new = np.array([
+	# 	[-1.0,  1.0, 0.0],
+	# 	[ 1.0,  1.0, 0.0],
+	# 	[ 1.0, -1.0, 0.0],
+	# 	[-1.0, -1.0, 0.0]
+	# 	], dtype=np.float32)
 
 	coeffs = []
 	rhs = []
@@ -171,14 +195,14 @@ def test_make_transform():
 
 	X = np.linalg.solve(np.array(coeffs), np.array(rhs))
 
-	trans_mat = np.array([
+	proj_mat = np.array([
 		[X[0], X[1],  0., X[2]],
 		[X[3], X[4],  0., X[5]],
 		[  0.,   0.,  1.,   0.],
 		[X[6], X[7],  0.,   1.]
 		], dtype=np.float32)
 
-	return trans_mat
+	return proj_mat
 
 def run():
 	global VAO
@@ -187,8 +211,10 @@ def run():
 	global ATTR_TEXCOORDS
 	global ATTR_TEXUNIT
 	global ATTR_MODELVIEWMAT
-	global ATTR_PROJMAT
+	global ATTR_VERTPROJMAT
+	global ATTR_TEXPROJMAT
 	global texture
+	global test_quad
 
 	init()
 
@@ -222,9 +248,16 @@ def run():
 	VAO = GL.glGenVertexArrays(1)
 	GL.glBindVertexArray(VAO)
 
+	test_quad = Quad(
+		[-1.0,  1.0, 0.0],
+		[ 1.0,  0.3, 0.0],
+		[ 1.0, -0.3, 0.0],
+		[-1.0, -1.0, 0.0],
+		make_model_view_mat(-0.2, 0.0, 0.0, 0.8, 0.8, 1.0))
+
 	VBO_positions = GL.glGenBuffers(1)
 	GL.glBindBuffer(GL.GL_ARRAY_BUFFER, VBO_positions)
-	GL.glBufferData(GL.GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL.GL_STATIC_DRAW)
+	GL.glBufferData(GL.GL_ARRAY_BUFFER, test_quad.VBO.nbytes, test_quad.VBO, GL.GL_STATIC_DRAW)
 
 	VBO_tex_coords = GL.glGenBuffers(1)
 	GL.glBindBuffer(GL.GL_ARRAY_BUFFER, VBO_tex_coords)
@@ -245,7 +278,9 @@ def run():
 
 	ATTR_MODELVIEWMAT = GL.glGetUniformLocation(shaderProgram, "v_modelViewMat")
 
-	ATTR_PROJMAT = GL.glGetUniformLocation(shaderProgram, "v_projMat")
+	ATTR_VERTPROJMAT = GL.glGetUniformLocation(shaderProgram, "v_vertProjMat")
+
+	ATTR_TEXPROJMAT = GL.glGetUniformLocation(shaderProgram, "v_texProjMat")
 
 	GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
 	GL.glBindVertexArray(0)
