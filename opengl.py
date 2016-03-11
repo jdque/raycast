@@ -1,6 +1,7 @@
 import os
 os.environ["PYSDL2_DLL_PATH"] = "C:\\dev\\raycast"
-import math
+import sys
+sys.path.append("C:\\dev\\raycast")
 import numpy as np
 
 import sdl2
@@ -10,6 +11,8 @@ import sdl2.video
 import OpenGL.GL as GL
 from OpenGL.GL import shaders
 
+from engine import *
+
 window = None
 surface = None
 renderer = None
@@ -18,7 +21,7 @@ shaderProgram = None
 textures = []
 running = True
 
-test_quads = []
+test_tris = []
 
 VAO_VERTEX = -1
 ATTR_POSITION = -1
@@ -27,135 +30,103 @@ ATTR_TEXUNIT = -1
 ATTR_MODELVIEWMAT = -1
 ATTR_VERTPROJMAT = -1
 ATTR_TEXPROJMAT = -1
+ATTR_TEXBOUNDS = -1
 
-def init():
-	global window
-	global surface
-	global renderer
-	global context
-	global shaderProgram
+def render_raycast(camera, tilemap):
+	global test_tris
 
-	#SDL
-	window = sdl2.ext.Window("Hello World!", size=(640, 640), flags=sdl2.SDL_WINDOW_OPENGL)
-	window.show()
-	surface = window.get_surface()
-	renderer = sdl2.ext.Renderer(surface, flags=sdl2.SDL_RENDERER_ACCELERATED)
+	test_tris = []
+	floor_pts, wall_pts = get_clipped_tile_points(tilemap, camera)
+	quads = get_tri_quads(wall_pts + floor_pts, camera)
+	for quad in quads:
+		pos = quad[2]
+		o_tri = np.c_[quad[0], np.zeros(4)]
+		t_tri = np.c_[quad[1], np.zeros(4)]
+		offset = np.c_[quad[3], np.zeros(4)]
 
-	#OpenGL
-	#sdl2.SDL_GL_SetAttribute(sdl2.SDL_GL_DOUBLEBUFFER, 1)
-	#sdl2.video.SDL_GL_SetAttribute(sdl2.video.SDL_GL_CONTEXT_PROFILE_MASK, sdl2.video.SDL_GL_CONTEXT_PROFILE_CORE)
-	context = sdl2.SDL_GL_CreateContext(window.window)
-	GL.glEnable(GL.GL_DEPTH_TEST)
-	GL.glDepthFunc(GL.GL_LESS)
-	GL.glClearColor(1.0, 0.0, 0.5, 1.0)
+		o_tri[:,1] *= -1
+		t_tri[:,1] *= -1
+		pos[1] *= -1
 
-	print GL.glGetString(GL.GL_VERSION)
+		tile_kind = quad[4]["kind"]
 
-	#Shaders
-	vertexShader = GL.shaders.compileShader("""
-		#version 430
+		if tile_kind == 0:
+			tile_tex = quad[4]["floor_tex"]
+		elif tile_kind == 1:
+			tile_tex = quad[4]["wall_tex"]
 
-		layout (location=0) in vec3 v_position;
-		layout (location=1) in vec2 v_texCoords;
+		#if tile_kind != 1:
+		area = 0.5 * np.linalg.det(np.array([
+			[1.0, t_tri[0][0], t_tri[0][1]],
+			[1.0, t_tri[1][0], t_tri[1][1]],
+			[1.0, t_tri[2][0], t_tri[2][1]],
+			]))
+		if abs(area) <= 0.00001:
+			continue
 
-		uniform mat4 v_modelViewMat;
-		uniform mat4 v_vertProjMat;
-		uniform mat4 v_texProjMat;
-		noperspective out vec4 f_texCoords;
+		test_tris.append(TriQuad(
+			o_tri,
+			t_tri,
+			make_model_view_mat(pos[X], pos[Y], 0.0, 1.0, 1.0, 1.0),
+			offset,
+			tile_tex))
 
-		void main()
-		{
-			vec4 projPos = v_vertProjMat * vec4(v_position, 1);
-			f_texCoords = v_texProjMat * (projPos / projPos.w);
-			gl_Position = v_modelViewMat * projPos;
-		}
-		""", GL.GL_VERTEX_SHADER)
+def update_raycast():
+	key_states = sdl2.keyboard.SDL_GetKeyboardState(None)
+	if key_states[sdl2.SDL_SCANCODE_ESCAPE]:
+		running = False
+	if key_states[sdl2.SDL_SCANCODE_UP]:
+		camera.move_forward(4)
+	elif key_states[sdl2.SDL_SCANCODE_DOWN]:
+		camera.move_forward(-4)
+	if key_states[sdl2.SDL_SCANCODE_LEFT]:
+		camera.rotate_by(-5)
+	elif key_states[sdl2.SDL_SCANCODE_RIGHT]:
+		camera.rotate_by(5)
+	if key_states[sdl2.SDL_SCANCODE_W]:
+		camera.tilt_by(-4)
+	elif key_states[sdl2.SDL_SCANCODE_S]:
+		camera.tilt_by(4)
 
-	fragmentShader = GL.shaders.compileShader("""
-		#version 430
+render_plane = (0, 0, 960, 640)
 
-		uniform sampler2D f_texUnit;
-		noperspective in vec4 f_texCoords;
+palette = TilePalette()
+palette.add(0, 0, 0.0, 8, 2)
+palette.add(1, 1, 1.0, 8, 2)
+palette.add(2, 1, 0.2, 8, 7)
 
-		void main()
-		{
-			//gl_FragColor = vec4(color, 1.0);
-			//gl_FragColor = texture(f_texUnit, f_texCoords);
-			//vec2 newCoords = vec2(f_texCoords.x / f_texCoords.w, f_texCoords.y / f_texCoords.w);
-			gl_FragColor = texture2DProj(f_texUnit, f_texCoords);
-		}
-		""", GL.GL_FRAGMENT_SHADER)
+tilemap = TileMap(7, 7, 64)
+tilemap.set_tiles_from_palette(palette,
+   [[1,1,1,1,1,1,1],
+	[1,0,0,1,0,0,1],
+	[1,0,2,2,0,0,1],
+	[1,0,2,0,0,0,1],
+	[1,0,0,0,0,0,1],
+	[1,0,0,0,0,0,1],
+	[1,1,1,1,1,1,1]])
 
-	shaderProgram = GL.shaders.compileProgram(vertexShader, fragmentShader)
+camera = Camera()
+camera.move_to(224, 288)
+camera.set_fov(60, 120, 80, 32)
 
-def update():
-	global running
+#------------------------------------------------------------------------------------------
 
-	events = sdl2.ext.get_events()
-	for event in events:
-		if event.type == sdl2.SDL_QUIT:
-			running = False
-		elif event.type == sdl2.SDL_KEYDOWN:
-			if event.key.keysym.sym == sdl2.SDLK_ESCAPE:
-				running = False
-
-def render():
-	#renderer.clear(0xFF000000)
-	#renderer.present()
-	#window.refresh()
-
-	GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
-
-	GL.glUseProgram(shaderProgram)
-
-	#wireframe
-	#GL.glPolygonMode(GL.GL_FRONT, GL.GL_LINE)
-
-	GL.glActiveTexture(GL.GL_TEXTURE0)
-
-	GL.glBindVertexArray(VAO_VERTEX)
-	for quad in test_quads:
-		GL.glUniformMatrix4fv(ATTR_MODELVIEWMAT, 1, GL.GL_TRUE, quad.model_view_mat)
-		GL.glUniformMatrix4fv(ATTR_VERTPROJMAT, 1, GL.GL_TRUE, quad.vert_proj_mat)
-		GL.glUniformMatrix4fv(ATTR_TEXPROJMAT, 1, GL.GL_TRUE, quad.tex_proj_mat)
-		GL.glBindTexture(GL.GL_TEXTURE_2D, quad.texture)
-		GL.glBindBuffer(GL.GL_ARRAY_BUFFER, quad.VBO)
-		GL.glVertexAttribPointer(ATTR_POSITION, 3, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
-		GL.glDrawArrays(GL.GL_TRIANGLES, 0, len(quad.vertices))
-		GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
-		GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
-	GL.glBindVertexArray(0)
-
-	sdl2.SDL_GL_SwapWindow(window.window)
-
-class Quad:
-	def __init__(self, ul, ur, br, bl, model_view_mat, texture):
-		old = np.array([
-			[-1.0,  1.0, 0.0],
-			[ 1.0,  1.0, 0.0],
-			[ 1.0, -1.0, 0.0],
-			[-1.0, -1.0, 0.0]
-			], dtype=np.float32)
-		new = np.array([ul, ur, br, bl], dtype=np.float32)
-		scale_bias = np.array([
-			[0.5, 0.0, 0.0, 0.5],
-			[0.0, 0.5, 0.0, 0.5],
-			[0.0, 0.0, 1.0, 0.0],
-			[0.0, 0.0, 0.0, 1.0]
-			], dtype=np.float32)
-
+class TriQuad:
+	def __init__(self, original, transformed, model_view_mat, texture_bounds, texture_id):
 		self.model_view_mat = model_view_mat
-		self.vert_proj_mat = make_proj_mat(old, new)
-		self.tex_proj_mat = np.dot(scale_bias, make_proj_mat(new, old))
+		self.vert_proj_mat = make_proj_mat(original, transformed)
+		self.tex_proj_mat = make_proj_mat(transformed, texture_bounds)
 
-		self.vertices = np.array([old[0], old[1], old[2], old[0], old[2], old[3]], dtype=np.float32).flatten()
+		self.vertices = np.array(original[0:3], dtype=np.float32).flatten()
 		self.VBO = GL.glGenBuffers(1)
 		GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.VBO)
-		GL.glBufferData(GL.GL_ARRAY_BUFFER, self.vertices.nbytes, self.vertices, GL.GL_STATIC_DRAW)
+		GL.glBufferData(GL.GL_ARRAY_BUFFER, self.vertices.nbytes, self.vertices, GL.GL_DYNAMIC_DRAW)
 		GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
 
-		self.texture = texture
+		self.texture_id = texture_id
 
+	def __del__(self):
+		GL.glDeleteBuffers(1, np.array([self.VBO]))
 
 def make_model_view_mat(x, y, z, sx, sy, sz):
 	model_view_mat = np.array([
@@ -213,6 +184,111 @@ def make_proj_mat(old, new):
 
 	return proj_mat
 
+def init():
+	global window
+	global surface
+	global renderer
+	global context
+	global shaderProgram
+
+	#SDL
+	window = sdl2.ext.Window("Hello World!", size=(960, 640), flags=sdl2.SDL_WINDOW_OPENGL)
+	window.show()
+	surface = window.get_surface()
+	renderer = sdl2.ext.Renderer(surface, flags=sdl2.SDL_RENDERER_ACCELERATED)
+
+	#OpenGL
+	#sdl2.SDL_GL_SetAttribute(sdl2.SDL_GL_DOUBLEBUFFER, 1)
+	#sdl2.video.SDL_GL_SetAttribute(sdl2.video.SDL_GL_CONTEXT_PROFILE_MASK, sdl2.video.SDL_GL_CONTEXT_PROFILE_CORE)
+	context = sdl2.SDL_GL_CreateContext(window.window)
+	GL.glEnable(GL.GL_DEPTH_TEST)
+	GL.glDepthFunc(GL.GL_LESS)
+	GL.glClearColor(1.0, 1.0, 1.0, 1.0)
+
+	print GL.glGetString(GL.GL_VERSION)
+
+	#Shaders
+	vertexShader = GL.shaders.compileShader("""
+		#version 430
+
+		layout (location=0) in vec3 v_position;
+		layout (location=1) in vec2 v_texCoords;
+
+		uniform mat4 v_modelViewMat;
+		uniform mat4 v_vertProjMat;
+		uniform mat4 v_texProjMat;
+
+		noperspective out vec4 f_texCoords;
+
+		void main()
+		{
+			vec4 projPos = v_vertProjMat * vec4(v_position, 1);
+
+			vec4 texCoords = v_texProjMat * (projPos / projPos.w);
+			f_texCoords = vec4(texCoords.x, texCoords.y, texCoords.z, texCoords.w);
+			gl_Position = v_modelViewMat * projPos;
+		}
+		""", GL.GL_VERTEX_SHADER)
+
+	fragmentShader = GL.shaders.compileShader("""
+		#version 430
+
+		uniform sampler2D f_texUnit;
+		noperspective in vec4 f_texCoords;
+
+		void main()
+		{
+			//gl_FragColor = vec4(color, 1.0);
+			//gl_FragColor = texture(f_texUnit, f_texCoords);
+			//vec2 newCoords = vec2(f_texCoords.x / f_texCoords.w, f_texCoords.y / f_texCoords.w);
+			gl_FragColor = texture2DProj(f_texUnit, f_texCoords);
+			//gl_FragColor = vec4( vec2(f_texCoords.x / f_texCoords.w, f_texCoords.y / f_texCoords.w),0,1);
+		}
+		""", GL.GL_FRAGMENT_SHADER)
+
+	shaderProgram = GL.shaders.compileProgram(vertexShader, fragmentShader)
+
+def update():
+	global running
+
+	events = sdl2.ext.get_events()
+	for event in events:
+		if event.type == sdl2.SDL_QUIT:
+			running = False
+		elif event.type == sdl2.SDL_KEYDOWN:
+			if event.key.keysym.sym == sdl2.SDLK_ESCAPE:
+				running = False
+
+def render():
+	#renderer.clear(0xFF000000)
+	#renderer.present()
+	#window.refresh()
+
+	GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
+
+	GL.glUseProgram(shaderProgram)
+
+	#wireframe
+	#GL.glPolygonMode(GL.GL_FRONT, GL.GL_LINE)
+
+	GL.glActiveTexture(GL.GL_TEXTURE0)
+
+	GL.glBindVertexArray(VAO_VERTEX)
+	for tri in test_tris:
+		GL.glUniformMatrix4fv(ATTR_MODELVIEWMAT, 1, GL.GL_TRUE, tri.model_view_mat)
+		GL.glUniformMatrix4fv(ATTR_VERTPROJMAT, 1, GL.GL_TRUE, tri.vert_proj_mat)
+		GL.glUniformMatrix4fv(ATTR_TEXPROJMAT, 1, GL.GL_TRUE, tri.tex_proj_mat)
+		GL.glBindTexture(GL.GL_TEXTURE_2D, tri.texture_id)
+		GL.glBindBuffer(GL.GL_ARRAY_BUFFER, tri.VBO)
+		GL.glVertexAttribPointer(ATTR_POSITION, 3, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
+		GL.glDrawArrays(GL.GL_TRIANGLES, 0, len(tri.vertices))
+		GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+		GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
+
+	GL.glBindVertexArray(0)
+
+	sdl2.SDL_GL_SwapWindow(window.window)
+
 def run():
 	global VAO_VERTEX
 	global ATTR_POSITION
@@ -221,6 +297,7 @@ def run():
 	global ATTR_MODELVIEWMAT
 	global ATTR_VERTPROJMAT
 	global ATTR_TEXPROJMAT
+	global ATTR_TEXBOUNDS
 	global textures
 	global test_quad
 
@@ -256,6 +333,7 @@ def run():
 	ATTR_MODELVIEWMAT = GL.glGetUniformLocation(shaderProgram, "v_modelViewMat")
 	ATTR_VERTPROJMAT = GL.glGetUniformLocation(shaderProgram, "v_vertProjMat")
 	ATTR_TEXPROJMAT = GL.glGetUniformLocation(shaderProgram, "v_texProjMat")
+	ATTR_TEXBOUNDS = GL.glGetUniformLocation(shaderProgram, "v_texBounds")
 	ATTR_TEXUNIT = GL.glGetUniformLocation(shaderProgram, "f_texUnit")
 
 	VAO_VERTEX = GL.glGenVertexArrays(1)
@@ -296,29 +374,61 @@ def run():
 
 		textures.append(texture)
 
-	test_quads.append(Quad(
-		[-1.0,  1.0, 0.0],
-		[ 1.0,  0.3, 0.0],
-		[ 1.0, -0.3, 0.0],
-		[-1.0, -1.0, 0.0],
-		make_model_view_mat(-0.6, 0.0, 0.0, 0.4, 0.4, 1.0), textures[1]))
-	test_quads.append(Quad(
-		[-1.0,  0.3, 0.0],
-		[ 1.0,  1.0, 0.0],
-		[ 1.0, -1.0, 0.0],
-		[-1.0, -0.3, 0.0],
-		make_model_view_mat(0.6, 0.0, 0.0, 0.4, 0.4, 1.0), textures[3]))
+	test_tris.append(TriQuad(
+		np.array([
+			[-1.0,  1.0, 0.0],
+			[ 1.0,  1.0, 0.0],
+			[ 1.0, -1.0, 0.0],
+			[-1.0, -1.0, 0.0]
+			]),
+		np.array([
+			[-0.4,  0.4, 0.0],
+			[ 0.4,  0.12, 0.0],
+			[ 0.4, -0.12, 0.0],
+			[-0.4, -0.4, 0.0]
+			]),
+		make_model_view_mat(-0.6, 0.0, 0.0, 1.0, 1.0, 1.0),
+		np.array([
+			[0.0, 1.0, 0.0],
+			[1.0, 1.0, 0.0],
+			[1.0, 0.0, 0.0],
+			[0.0, 0.0, 0.0]
+			]),
+		textures[0]))
+	test_tris.append(TriQuad(
+		np.array([
+			[-1.0,  1.0, 0.0],
+			[ 1.0,  1.0, 0.0],
+			[ 1.0, -1.0, 0.0],
+			[-1.0, -1.0, 0.0]
+			]),
+		np.array([
+			[-1.0,  0.3, 0.0],
+			[ 1.0,  1.0, 0.0],
+			[ 1.0, -1.0, 0.0],
+			[-1.0, -0.3, 0.0]
+			]),
+		make_model_view_mat(0.6, 0.7, 0.0, 0.4, 0.4, 1.0),
+		np.array([
+			[0.0, 1.0, 0.0],
+			[1.0, 1.0, 0.0],
+			[1.0, 0.0, 0.0],
+			[0.0, 0.0, 0.0]
+			]),
+		textures[3]))
 
 	while running:
 		now = sdl2.timer.SDL_GetTicks()
 
 		update()
+		update_raycast()
+		render_raycast(camera, tilemap)
 		render()
 
 		delay = 1000 / 60 - (sdl2.timer.SDL_GetTicks() - now)
-		#print 1000 / (sdl2.timer.SDL_GetTicks() - now)
+		print 1000 / (sdl2.timer.SDL_GetTicks() - now)
 		if delay > 0:
-			sdl2.timer.SDL_Delay(delay)
+		 	sdl2.timer.SDL_Delay(delay)
 
 	window.hide()
 	#sdl2.SDL_GL_DeleteContext(context)
