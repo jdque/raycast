@@ -4,6 +4,7 @@ import math
 import numpy as np
 import sdl2
 import sdl2.ext
+import sdl2.sdlimage
 
 PALETTE = {}
 PALETTE[0] = 0x00000000
@@ -285,23 +286,25 @@ def dda5(pt, dir, step, tilemap):
 		x = 999
 
 	collisions = []
+	offsets = []
 
-	#while x >= 0 and x < 384 and y >= 0 and y < 384:
-	#while abs(x) < 1000 and abs(y) < 1000:
 	while x < 1000 or y < 1000:
 		if x < y:
 			hit = pt + dir * abs(x)
 			x += delt_x
+			offsets.append(hit[1] % 64)
 		else:
 			hit = pt + dir * abs(y)
 			y += delt_y
+			offsets.append(hit[0] % 64)
+
+		collisions.append(hit)
 
 		tile = tilemap.get_tile_px(hit[0], hit[1])
-		collisions.append(hit)
 		if tile > 0:
 			break
 
-	return np.array(collisions)
+	return np.array(collisions), np.array(offsets)
 
 def get_collision_point(tilemap, ray):
 	for pt in dda(ray[0], ray[0] + ray[1] * 200):
@@ -354,6 +357,9 @@ def render_scan(camera, tilemap):
 	ceil_rects = []
 	floor_rects = []
 
+	floor_offsets = []
+	wall_offsets = []
+
 	# rects = []
 	# for i in range(590):
 	# 	rects.append((i * 2, 10, 2, 100))
@@ -368,15 +374,31 @@ def render_scan(camera, tilemap):
 		#renderer.draw_line((int(ray[0][0]), int(ray[0][1]), int(ray[1][0]), int(ray[1][1])), 0xFFF0000)
 		#collision, tile = get_collision_point4(tilemap, ray)
 
-		collisions = dda5(camera.pos, v_ray, 64, tilemap)
+		collisions, offsets = dda5(camera.pos, v_ray, 64, tilemap)
 		if len(collisions) > 0:
 			angle = np.deg2rad(camera.angle) - np.arctan2(v_ray[1], v_ray[0])
 			heights = (height_factor / (np.linalg.norm((collisions - camera.pos), axis=1) * np.cos(angle))).astype(int)
 
-			floor_rects += [(400 + scan_line_x, 240, 2, h / 2) for h in heights[:-1] if np.abs(h) < 1000]
-			ceil_rects += [(400 + scan_line_x, 240 - h / 2, 2, h / 2) for h in heights[:-1] if np.abs(h) < 1000]
+			#floor_rects += [(400 + scan_line_x, 320, 2, h / 2) for h in heights[:-1] if np.abs(h) < 1000]
+			#ceil_rects += [(400 + scan_line_x, 320 - h / 2, 2, h / 2) for h in heights[:-1] if np.abs(h) < 1000]
+
+			for idx, h in enumerate(heights[:-1]):
+				if np.abs(h) < 1000:
+					floor_rects.append((400 + scan_line_x, 320 + heights[-1] / 2, 2, h / 2 - heights[-1] / 2))
+					ceil_rects.append((400 + scan_line_x, 320 - h / 2, 2, h / 2))
+					floor_offsets.append(offsets[idx])
+
+			# prev = 0
+			# for idx, h in reversed(list(enumerate(heights[:-1]))):
+			# 	if np.abs(h) < 1000:
+			# 		floor_rects.append((400 + scan_line_x, 320 + prev, 2, h / 2 - prev))
+			# 		ceil_rects.append((400 + scan_line_x, 320 - h / 2, 2, h / 2 - prev))
+			# 		floor_offsets.append(offsets[idx])
+			# 		prev = h / 2
+
 			if np.abs(heights[-1]) < 1000:
-				wall_rects += [(400 + scan_line_x, 240 - heights[-1] / 2, 2, heights[-1])]
+				wall_rects.append((400 + scan_line_x, 320 - heights[-1] / 2, 2, heights[-1]))
+				wall_offsets.append(offsets[-1])
 
 			"""for i in range(0, len(collisions) - 1):
 				f_height = 64 * np.linalg.norm(camera.dir) / (np.linalg.norm(collisions[i][0] - camera.pos) * np.cos(angle))
@@ -418,14 +440,33 @@ def render_scan(camera, tilemap):
 
 		scan_line_x += 2
 
-	if len(floor_rects) > 0:
-		renderer.fill(floor_rects, 0x80808080)
-	if len(ceil_rects) > 0:
-		renderer.fill(ceil_rects, 0x40404040)
-	if len(wall_rects) > 0:
-		renderer.fill(wall_rects, 0xFFFFFFFF)
+	# if len(floor_rects) > 0:
+	# 	renderer.fill(floor_rects, 0x80808080)
+	# if len(ceil_rects) > 0:
+	# 	renderer.fill(ceil_rects, 0x40404040)
+	# if len(wall_rects) > 0:
+	# 	renderer.fill(wall_rects, 0xFFFFFFFF)
 
-window = sdl2.ext.Window("Hello World!", size=(1280, 480))
+	# for rect in floor_rects:
+	# 	renderer.draw_line((rect[0], rect[1] + rect[3], rect[0] + 2, rect[1] + rect[3]), 0xFFFFFFFF)
+
+	#for rect in floor_rects:
+	#	renderer.fill(rect, 0x80808080)
+	#for rect in ceil_rects:
+	#	renderer.fill(rect, 0x40404040)
+	#for rect in wall_rects:
+	#	renderer.fill(rect, 0xFFFFFFFF)
+
+	# for i in range(len(floor_rects)):
+	#  	renderer.copy(texture_sprite, srcrect=(0 + int(floor_offsets[i]), 0, 1, 64), dstrect=floor_rects[i])
+
+	# for i in range(len(ceil_rects)):
+	#  	renderer.copy(texture_sprite, srcrect=(128 + int(floor_offsets[i]), 0, 1, 64), dstrect=ceil_rects[i])
+
+	for i in range(len(wall_rects)):
+		renderer.copy(texture_sprite, srcrect=(384 + int(wall_offsets[i]), 0, 1, 64), dstrect=wall_rects[i])
+
+window = sdl2.ext.Window("Hello World!", size=(1280, 640))
 window.show()
 
 surface = window.get_surface()
@@ -436,12 +477,12 @@ renderer = sdl2.ext.Renderer(surface, flags=sdl2.SDL_RENDERER_ACCELERATED)
 #processor.run(window)
 
 tilemap = TileMap([
-	[0,4,4,1,1,0],
-	[2,0,0,0,1,0],
-	[2,0,1,0,0,0],
-	[2,-1,-2,1,0,0],
-	[2,-2,-1,1,0,0],
-	[1,3,3,1,0,1]], 64)
+	[1,1,1,1,1,0],
+	[1,0,0,0,1,0],
+	[1,0,1,0,0,0],
+	[1,0,0,1,0,0],
+	[1,0,0,1,0,0],
+	[1,1,1,1,0,1]], 64)
 
 camera = Camera()
 camera.move_to(160, 224)
@@ -450,6 +491,26 @@ camera.set_fov(60, 480)
 grid_color = sdl2.ext.Color(0, 255, 0, 255)
 floor_color = sdl2.ext.Color(0, 96, 96, 128)
 
+texture_surface = sdl2.ext.load_image("C:\\dev\\raycast\\textures.png")
+factory = sdl2.ext.SpriteFactory(sprite_type=sdl2.ext.TEXTURE, renderer=renderer)
+texture_sprite = factory.from_surface(texture_surface)
+
+sprite_factory = sdl2.ext.SpriteFactory(sprite_type=sdl2.ext.SOFTWARE, renderer=renderer)
+test_sprite = sprite_factory.create_software_sprite((64, 64))
+buffer_sprite = sprite_factory.create_software_sprite((128, 128))
+
+sdl2.SDL_BlitSurface(texture_surface, sdl2.SDL_Rect(0, 0, 64, 64), test_sprite.surface, sdl2.SDL_Rect(0, 0, 64, 64))
+
+t_mat = np.array([
+	[1,  -0.5,   32],
+	[0,     1,   0],
+	[0,     0,   1]])
+
+rx = np.arange(0, 64)
+ry = np.arange(0, 64)
+mrx, mry = np.meshgrid(rx, ry)
+coords = np.vstack((mrx.reshape(1, mrx.size), mry.reshape(1, mry.size), np.ones(mrx.size, dtype=np.int32)))
+print coords
 running = True
 while running:
 	now = sdl2.timer.SDL_GetTicks()
@@ -471,13 +532,33 @@ while running:
 			if event.key.keysym.sym == sdl2.SDLK_RIGHT:
 				camera.rotate_by(5)
 
-	#render
 	renderer.clear(0xFF000000)
+
 	render_grid(tilemap, grid_color)
 	render_tiles(tilemap)
 	render_camera(camera)
 	render_scan(camera, tilemap)
 
+	#sdl2.SDL_RenderCopyEx(renderer.renderer, texture_sprite.texture, sdl2.SDL_Rect(0, 0, 64, 64), sdl2.SDL_Rect(0, 0, 64, 64), 45, None, sdl2.SDL_FLIP_NONE)
+
+	sdl2.SDL_BlitSurface(test_sprite.surface, sdl2.SDL_Rect(0, 0, 64, 64), buffer_sprite.surface, sdl2.SDL_Rect(0, 0, 64, 64))
+	src_px = sdl2.ext.pixels2d(test_sprite.surface)
+	dst_px = sdl2.ext.pixels2d(buffer_sprite.surface)
+	t_coords = np.dot(t_mat, coords)
+
+	dst_px[0:64, 0:64] = dst_px.T[0:64, 0:64]
+
+	#for i in range(12):
+	#	for i in np.arange(coords.shape[1]):
+	#		dst_px[t_coords[0,i], t_coords[1,i]] = src_px[coords[0,i], coords[1,i]]
+
+	# for y in range(0, 64):
+	# 	for x in range(0, 64):
+	# 		dst = np.dot(t_mat, np.array([x, y, 1]))
+	# 		dst_px[dst[0], dst[1]] = src_px[x, y]
+
+	#sdl2.SDL_BlitSurface(buffer_sprite.surface, sdl2.SDL_Rect(0, 0, 64, 64), window.get_surface(), sdl2.SDL_Rect(0, 0, 64, 64))
+	#sdl2.SDL_BlitSurface(window.get_surface(), sdl2.SDL_Rect(64, 0, 64, 64), window.get_surface(), sdl2.SDL_Rect(0, 0, 64, 64))
 	renderer.present()
 
 	delay = 1000 / 60 - (sdl2.timer.SDL_GetTicks() - now)
