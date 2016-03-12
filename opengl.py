@@ -46,11 +46,10 @@ def render_raycast(camera, tilemap):
 		t_tri[:,1] *= -1
 		pos[1] *= -1
 
-		tile_kind = quad[4]["kind"]
-
-		if tile_kind == 0:
+		surface_type = quad[5]
+		if surface_type == 0:
 			tile_tex = quad[4]["floor_tex"]
-		elif tile_kind == 1:
+		elif surface_type == 1:
 			tile_tex = quad[4]["wall_tex"]
 
 		area = 0.5 * np.linalg.norm(np.cross(t_tri[1] - t_tri[0], t_tri[2] - t_tri[0]))

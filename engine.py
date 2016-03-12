@@ -395,7 +395,7 @@ def get_tri_quads(tile_pts, camera):
 					])
 
 				if len(trans_pts) == 4:
-					final_quads.append((og_pts, trans_pts, trans_mid_pt, offsets, tile))
+					final_quads.append((og_pts, trans_pts, trans_mid_pt, offsets, tile, surface_type))
 		elif surface_type == 1: #wall
 			#temp - append tri midpoints
 			clip_w = abs(tile_pt[0][1] - tile_pt[0][0])
@@ -473,7 +473,7 @@ def get_tri_quads(tile_pts, camera):
 				[offset_l, 0.0],
 				[(offset_l + offset_r + offset_l) / 3., 1/3.],
 				])
-			final_quads.append((og_pts, tr_pts, mid, offs, tile))
+			final_quads.append((og_pts, tr_pts, mid, offs, tile, surface_type))
 
 			#triquad 2
 			og_pts = np.array([
@@ -496,6 +496,6 @@ def get_tri_quads(tile_pts, camera):
 				[offset_r, 0.0],
 				[(offset_l + offset_r + offset_r) / 3., 2/3.],
 				])
-			final_quads.append((og_pts, tr_pts, mid, offs, tile))
+			final_quads.append((og_pts, tr_pts, mid, offs, tile, surface_type))
 
 	return final_quads
