@@ -108,7 +108,7 @@ tilemap.set_tiles_from_palette(palette,
 
 camera = Camera()
 camera.move_to(224, 288)
-camera.set_fov(60, 120, 80, 16, 1000)
+camera.set_fov(60, 16, 1000, 120, 80)
 
 #------------------------------------------------------------------------------------------
 
@@ -118,7 +118,7 @@ class TriQuad:
 		self.vert_proj_mat = make_proj_mat(original[:,0:2], transformed)
 		self.tex_proj_mat = make_proj_mat(transformed, texture_bounds)
 
-		self.vertices = np.array(original[0:3], dtype=np.float32).flatten()
+		self.vertices = original[0:3].ravel().astype(np.float32)
 		self.VBO = GL.glGenBuffers(1)
 		GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.VBO)
 		GL.glBufferData(GL.GL_ARRAY_BUFFER, self.vertices.nbytes, self.vertices, GL.GL_DYNAMIC_DRAW)

@@ -49,23 +49,14 @@ class TileMap:
 
 class Camera:
 	def __init__(self):
-		self.pos = np.array([0., 0.])
-		self.dir = np.array([100, 0])
-		self.plane = np.array([0, 50])
-		self.near_dir = np.array([0, 0])
-		self.near_plane = np.array([0, 0])
-		self.angle = 0
-		self.width = 100
-		self.height = 100
-		self.horizon_y = 50
-		self.v_rays = np.array([])
+		self.set_fov(90, 0, 100, 100, 100)
+		self.pos = np.array([0, 0])
 
 	def move_to(self, x, y):
 		self.pos[0] = x
 		self.pos[1] = y
 
 	def rotate_to(self, angle):
-		self.angle = angle
 		rad = np.deg2rad(angle)
 		rot = np.array([
 			[np.cos(rad), -np.sin(rad)],
@@ -81,7 +72,6 @@ class Camera:
 		self.pos[1] += dy
 
 	def rotate_by(self, da):
-		self.angle += da
 		rad = np.deg2rad(da)
 		rot = np.array([
 			[np.cos(rad), -np.sin(rad)],
@@ -92,8 +82,8 @@ class Camera:
 		self.near_dir = np.dot(rot, self.near_dir)
 		self.near_plane = np.dot(rot, self.near_plane)
 
-		for i in range(0, len(self.v_rays)):
-			self.v_rays[i] = np.dot(rot, self.v_rays[i])
+		for i in range(0, len(self.rays)):
+			self.rays[i] = np.dot(rot, self.rays[i])
 
 	def move_forward(self, distance):
 		step = self.dir / np.linalg.norm(self.dir) * distance
@@ -102,18 +92,19 @@ class Camera:
 	def tilt_by(self, distance):
 		self.horizon_y += distance
 
-	def set_fov(self, angle, plane_width, plane_height, near, far):
+	def set_fov(self, angle, near, far, plane_width, plane_height):
+		self.angle = float(angle)
+		self.near = float(near)
+		self.far = float(far)
 		self.width = float(plane_width)
 		self.height = float(plane_height)
-		self.near = near
-		self.far = far
 		self.horizon_y = float(plane_height / 2)
 
-		self.dir = np.array([(plane_width / 2) / np.tan(np.deg2rad(angle / 2)), 0])
-		self.plane = np.array([0, plane_width / 2])
-		self.near_dir = np.array([near, 0])
-		self.near_plane = np.array([0, near * np.tan(np.deg2rad(angle / 2))])
-		self.v_rays = self.generate_rays()
+		self.dir = np.array([(self.width / 2) / np.tan(np.deg2rad(self.angle / 2)), 0])
+		self.plane = np.array([0, self.width / 2])
+		self.near_dir = np.array([self.near, 0])
+		self.near_plane = np.array([0, self.near * np.tan(np.deg2rad(self.angle / 2))])
+		self.rays = self.generate_rays()
 
 	def generate_rays(self):
 		rays = []
@@ -123,9 +114,6 @@ class Camera:
 			unit_ray = plane_pt / math.sqrt(plane_pt[0]**2 + plane_pt[1]**2)
 			rays.append(unit_ray)
 		return np.array(rays)
-
-	def rays(self):
-		return self.v_rays
 
 def dda(origin, dir, step, tilemap):
 	m = dir[1] / dir[0]
@@ -214,8 +202,8 @@ def clip_floor(ul, ur, br, bl, camera):
 		[ul, ur],
 		[bl, br]
 		]
-	cam_l_ray = camera.v_rays[0]
-	cam_r_ray = camera.v_rays[-1]
+	cam_l_ray = camera.rays[0]
+	cam_r_ray = camera.rays[-1]
 
 	final_pts = []
 
@@ -266,8 +254,8 @@ def clip_floor(ul, ur, br, bl, camera):
 	return final_pts
 
 def clip_wall(left, right, camera):
-	cam_l_ray = camera.v_rays[0]
-	cam_r_ray = camera.v_rays[-1]
+	cam_l_ray = camera.rays[0]
+	cam_r_ray = camera.rays[-1]
 
 	final_pts = []
 
@@ -298,10 +286,9 @@ def get_clipped_tile_points(tilemap, camera):
 	floor_pts = []
 	wall_pts = []
 	used_tiles = set()
-	rays = camera.rays()
 	max_height = 1.0
 
-	for ray in rays:
+	for ray in camera.rays:
 		stop = False
 		cur_height = 0
 		for collision, side in dda(camera.pos, ray, 64, tilemap):
