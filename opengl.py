@@ -100,7 +100,7 @@ tilemap = TileMap(7, 7, 64)
 tilemap.set_tiles_from_palette(palette,
    [[1,1,1,1,1,1,1],
 	[1,0,0,1,1,0,1],
-	[1,0,0,2,2,0,1],
+	[1,0,0,2,3,0,1],
 	[1,0,0,0,0,0,1],
 	[1,0,0,0,0,0,1],
 	[1,0,0,0,0,0,1],
@@ -108,7 +108,7 @@ tilemap.set_tiles_from_palette(palette,
 
 camera = Camera()
 camera.move_to(224, 288)
-camera.set_fov(60, 120, 80, 16)
+camera.set_fov(60, 120, 80, 16, 1000)
 
 #------------------------------------------------------------------------------------------
 
@@ -247,12 +247,11 @@ def init():
 			//gl_FragColor = vec4(color, 1.0);
 			//gl_FragColor = texture(f_texUnit, f_texCoords);
 			//vec2 newCoords = vec2(f_texCoords.x / f_texCoords.w, f_texCoords.y / f_texCoords.w);
-			gl_FragColor = texture2DProj(f_texUnit, f_texCoords);
 			//gl_FragColor = vec4( vec2(f_texCoords.x / f_texCoords.w, f_texCoords.y / f_texCoords.w),0,1);
-			//float z = (1.0 - f_texCoords.z - 0.7) * 4.0;
-			//float z = (1.0 - gl_FragCoord.z - 0.3) * 4.0;
 			//float z = (1.0 - f_z - 0.7) * 4.0;
-			//gl_FragColor = vec4(z, z, z, 1);
+			//gl_FragColor = vec4(z, z, z, 1.0);
+			gl_FragDepth = f_z;
+			gl_FragColor = texture2DProj(f_texUnit, f_texCoords);
 		}
 		""", GL.GL_FRAGMENT_SHADER)
 
@@ -279,7 +278,7 @@ def render():
 	GL.glUseProgram(shaderProgram)
 
 	#wireframe
-	#GL.glPolygonMode(GL.GL_FRONT, GL.GL_LINE)
+	#GL.glPolygonMode(GL.GL_FRONT_AND_BACK, GL.GL_LINE)
 
 	GL.glActiveTexture(GL.GL_TEXTURE0)
 

@@ -52,8 +52,8 @@ class Camera:
 		self.pos = np.array([0., 0.])
 		self.dir = np.array([100, 0])
 		self.plane = np.array([0, 50])
-		self.clip_dir = np.array([0, 0])
-		self.clip_plane = np.array([0, 0])
+		self.near_dir = np.array([0, 0])
+		self.near_plane = np.array([0, 0])
 		self.angle = 0
 		self.width = 100
 		self.height = 100
@@ -73,11 +73,10 @@ class Camera:
 		])
 		self.dir = np.dot(rot, self.dir)
 		self.plane = np.dot(rot, self.plane)
-		self.clip_dir = np.dot(rot, self.clip_dir)
-		self.clip_plane = np.dot(rot, self.clip_plane)
+		self.near_dir = np.dot(rot, self.near_dir)
+		self.near_plane = np.dot(rot, self.near_plane)
 
 	def move_by(self, dx, dy):
-		#self.pos = np.add(self.pos, [dx, dy])
 		self.pos[0] += dx
 		self.pos[1] += dy
 
@@ -90,8 +89,8 @@ class Camera:
 		])
 		self.dir = np.dot(rot, self.dir)
 		self.plane = np.dot(rot, self.plane)
-		self.clip_dir = np.dot(rot, self.clip_dir)
-		self.clip_plane = np.dot(rot, self.clip_plane)
+		self.near_dir = np.dot(rot, self.near_dir)
+		self.near_plane = np.dot(rot, self.near_plane)
 
 		for i in range(0, len(self.v_rays)):
 			self.v_rays[i] = np.dot(rot, self.v_rays[i])
@@ -103,15 +102,17 @@ class Camera:
 	def tilt_by(self, distance):
 		self.horizon_y += distance
 
-	def set_fov(self, angle, plane_width, plane_height, clip_width):
+	def set_fov(self, angle, plane_width, plane_height, near, far):
 		self.width = float(plane_width)
 		self.height = float(plane_height)
+		self.near = near
+		self.far = far
 		self.horizon_y = float(plane_height / 2)
 
 		self.dir = np.array([(plane_width / 2) / np.tan(np.deg2rad(angle / 2)), 0])
 		self.plane = np.array([0, plane_width / 2])
-		self.clip_dir = np.array([(clip_width / 2) / np.tan(np.deg2rad(angle / 2)), 0])
-		self.clip_plane = np.array([0, clip_width / 2])
+		self.near_dir = np.array([near, 0])
+		self.near_plane = np.array([0, near * np.tan(np.deg2rad(angle / 2))])
 		self.v_rays = self.generate_rays()
 
 	def generate_rays(self):
@@ -220,7 +221,7 @@ def clip_floor(ul, ur, br, bl, camera):
 
 	#filter points that are outside the view frustrum
 	for pt in [ul, ur, bl, br]:
-		if not point_in_rect(pt, ul, br) or point_in_triangle(pt, camera.pos + (camera.clip_dir * 0.99) - (camera.clip_plane * 1.01), camera.pos + (camera.clip_dir * 0.99) + (camera.clip_plane * 0.99), camera.pos):
+		if not point_in_rect(pt, ul, br) or point_in_triangle(pt, camera.pos + (camera.near_dir * 0.99) - (camera.near_plane * 1.01), camera.pos + (camera.near_dir * 0.99) + (camera.near_plane * 0.99), camera.pos):
 			continue
 		unit = (pt - camera.pos) / np.linalg.norm(pt - camera.pos)
 		if np.dot(cam_l_ray / np.linalg.norm(cam_l_ray), unit) > 0.9999:
@@ -232,8 +233,8 @@ def clip_floor(ul, ur, br, bl, camera):
 
 	#add points where tile edges intersect field of vision bounds
 	clip_rays = [
-		[camera.pos + camera.clip_dir - camera.clip_plane, cam_l_ray / np.linalg.norm(cam_l_ray)],
-		[camera.pos + camera.clip_dir + camera.clip_plane, cam_r_ray / np.linalg.norm(cam_r_ray)]
+		[camera.pos + camera.near_dir - camera.near_plane, cam_l_ray / np.linalg.norm(cam_l_ray)],
+		[camera.pos + camera.near_dir + camera.near_plane, cam_r_ray / np.linalg.norm(cam_r_ray)]
 		]
 	for clip_ray in clip_rays:
 		for edge in edges:
@@ -243,7 +244,7 @@ def clip_floor(ul, ur, br, bl, camera):
 
 	#add points where tile edges intersect near clip segment
 	clip_segs = [
-		[camera.pos + camera.clip_dir - camera.clip_plane, camera.pos + camera.clip_dir + camera.clip_plane]
+		[camera.pos + camera.near_dir - camera.near_plane, camera.pos + camera.near_dir + camera.near_plane]
 		]
 	for clip_seg in clip_segs:
 		for edge in edges:
@@ -252,10 +253,10 @@ def clip_floor(ul, ur, br, bl, camera):
 				final_pts.append(pt)
 
 	#add left and right endpoints of near clip segment if they are inside the tile
-	near_clip_l = camera.pos + camera.clip_dir - camera.clip_plane
+	near_clip_l = camera.pos + camera.near_dir - camera.near_plane
 	if point_in_rect(near_clip_l, ul, br):
 		final_pts.append(near_clip_l)
-	near_clip_r = camera.pos + camera.clip_dir + camera.clip_plane
+	near_clip_r = camera.pos + camera.near_dir + camera.near_plane
 	if point_in_rect(near_clip_r, ul, br):
 		final_pts.append(near_clip_r)
 
@@ -390,7 +391,7 @@ def get_tri_quads(tile_pts, camera):
 					###
 					vector = pt - camera.pos
 					proj = camera.dir * (np.dot(vector, camera.dir) / np.dot(camera.dir, camera.dir))
-					z = np.linalg.norm(proj) / (np.linalg.norm(camera.dir) + 1000)
+					z = np.linalg.norm(proj) / (camera.far - camera.near)
 					###
 					d = pt + d_mid
 					og_pts.append([(d[X] / camera.width - 0.5) * 2, (d[Y] / camera.height - 0.5) * 2, z])
@@ -454,10 +455,10 @@ def get_tri_quads(tile_pts, camera):
 			###
 			vector = tile_pt[0][0] - camera.pos
 			proj = camera.dir * (np.dot(vector, camera.dir) / np.dot(camera.dir, camera.dir))
-			zl = np.linalg.norm(proj) / (np.linalg.norm(camera.dir) + 1000)
+			zl = np.linalg.norm(proj) / (camera.far - camera.near)
 			vector = tile_pt[0][1] - camera.pos
 			proj = camera.dir * (np.dot(vector, camera.dir) / np.dot(camera.dir, camera.dir))
-			zr = np.linalg.norm(proj) / (np.linalg.norm(camera.dir) + 1000)
+			zr =  np.linalg.norm(proj) / (camera.far - camera.near)
 			###
 			w = np.linalg.norm(tile_pt[0][1] - tile_pt[0][0])
 			o_l = ((camera.width / 2. - w / 2.) / camera.width - 0.5) * 2

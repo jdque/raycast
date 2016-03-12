@@ -87,7 +87,7 @@ def run():
 
 	camera = Camera()
 	camera.move_to(224, 288)
-	camera.set_fov(60, 480, 320, 32)
+	camera.set_fov(60, 480, 320, 16, 1000)
 
 	running = True
 	while running:
