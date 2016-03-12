@@ -49,8 +49,8 @@ class TileMap:
 
 class Camera:
 	def __init__(self):
+		self.pos = np.array([0., 0.])
 		self.set_fov(90, 0, 100, 100, 100)
-		self.pos = np.array([0, 0])
 
 	def move_to(self, x, y):
 		self.pos[0] = x
@@ -98,7 +98,7 @@ class Camera:
 		self.far = float(far)
 		self.width = float(plane_width)
 		self.height = float(plane_height)
-		self.horizon_y = float(plane_height / 2)
+		self.horizon_y = float(plane_height) / 2
 
 		self.dir = np.array([(self.width / 2) / np.tan(np.deg2rad(self.angle / 2)), 0])
 		self.plane = np.array([0, self.width / 2])
