@@ -286,6 +286,7 @@ def get_clipped_tile_points(tilemap, camera):
 	floor_pts = []
 	wall_pts = []
 	used_tiles = set()
+	camera_height = 0.0
 	max_height = 1.0
 
 	for ray in camera.rays:
@@ -304,12 +305,13 @@ def get_clipped_tile_points(tilemap, camera):
 			render_wall = False
 			if tile_height > cur_height:
 				render_wall = True
-			if tile_height < 0.5:
+			if abs(cur_height + tile_height - camera_height) < 0.5:
 				render_floor = True
 			if tile_height >= max_height:
 				stop = True
 
-			cur_height = tile_height
+			if tile_height > cur_height:
+				cur_height = tile_height
 
 			if (int(collision[X]) + 1) % 64 <= 1.0 and (int(collision[Y]) + 1) % 64 <= 1.0:
 				continue
