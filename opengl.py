@@ -25,19 +25,17 @@ test_tris = []
 
 VAO_VERTEX = -1
 ATTR_POSITION = -1
-ATTR_TEXCOORDS = -1
 ATTR_TEXUNIT = -1
 ATTR_MODELVIEWMAT = -1
 ATTR_VERTPROJMAT = -1
 ATTR_TEXPROJMAT = -1
-ATTR_TEXBOUNDS = -1
 
 def render_raycast(camera, tilemap):
 	global test_tris
 
 	test_tris = []
 	floor_pts, wall_pts = get_clipped_tile_points(tilemap, camera)
-	quads = get_tri_quads(wall_pts + floor_pts, camera)
+	quads = get_tri_quads(floor_pts + wall_pts, camera)
 	for quad in quads:
 		pos = quad[2]
 		o_tri = quad[0]
@@ -55,12 +53,7 @@ def render_raycast(camera, tilemap):
 		elif tile_kind == 1:
 			tile_tex = quad[4]["wall_tex"]
 
-		#if tile_kind != 1:
-		area = 0.5 * np.linalg.det(np.array([
-			[1.0, t_tri[0][0], t_tri[0][1]],
-			[1.0, t_tri[1][0], t_tri[1][1]],
-			[1.0, t_tri[2][0], t_tri[2][1]],
-			]))
+		area = 0.5 * np.linalg.norm(np.cross(t_tri[1] - t_tri[0], t_tri[2] - t_tri[0]))
 		if abs(area) <= 0.00001:
 			continue
 
@@ -87,8 +80,6 @@ def update_raycast():
 		camera.tilt_by(-4)
 	elif key_states[sdl2.SDL_SCANCODE_S]:
 		camera.tilt_by(4)
-
-render_plane = (0, 0, 960, 640)
 
 palette = TilePalette()
 palette.add(0, 0, 0.0, 8, 2)
@@ -138,7 +129,7 @@ def make_model_view_mat(x, y, z, sx, sy, sz):
 		])
 	return model_view_mat
 
-def make_proj_mat(old, new):
+def make_proj_mat(orig_pts, trans_pts):
 	"""
 	Using four corner points of quad, solve for the coefficients m1-m8 in system:
 
@@ -152,27 +143,13 @@ def make_proj_mat(old, new):
     s/w, t/w = projected texture coordinates
 	"""
 
-	# old = np.array([
-	# 	[-1.0,  1.0, 0.0],
-	# 	[ 1.0,  0.3, 0.0],
-	# 	[ 1.0, -0.3, 0.0],
-	# 	[-1.0, -1.0, 0.0]
-	# 	], dtype=np.float32)
-
-	# new = np.array([
-	# 	[-1.0,  1.0, 0.0],
-	# 	[ 1.0,  1.0, 0.0],
-	# 	[ 1.0, -1.0, 0.0],
-	# 	[-1.0, -1.0, 0.0]
-	# 	], dtype=np.float32)
-
 	coeffs = []
 	rhs = []
-	for o, n in zip(old, new):
-		coeffs.append(np.array([o[0], o[1], 1, 0, 0, 0, -o[0] * n[0], -o[1] * n[0]]))
-		coeffs.append(np.array([0, 0, 0, o[0], o[1], 1, -o[0] * n[1], -o[1] * n[1]]))
-		rhs.append(n[0])
-		rhs.append(n[1])
+	for o, t in zip(orig_pts, trans_pts):
+		coeffs.append(np.array([o[0], o[1], 1, 0, 0, 0, -o[0] * t[0], -o[1] * t[0]]))
+		coeffs.append(np.array([0, 0, 0, o[0], o[1], 1, -o[0] * t[1], -o[1] * t[1]]))
+		rhs.append(t[0])
+		rhs.append(t[1])
 
 	X = np.linalg.solve(np.array(coeffs), np.array(rhs))
 
@@ -191,6 +168,13 @@ def init():
 	global renderer
 	global context
 	global shaderProgram
+	global VAO_VERTEX
+	global ATTR_POSITION
+	global ATTR_TEXUNIT
+	global ATTR_MODELVIEWMAT
+	global ATTR_VERTPROJMAT
+	global ATTR_TEXPROJMAT
+	global textures
 
 	#SDL
 	window = sdl2.ext.Window("Hello World!", size=(960, 640), flags=sdl2.SDL_WINDOW_OPENGL)
@@ -213,23 +197,20 @@ def init():
 		#version 430
 
 		layout (location=0) in vec3 v_position;
-		layout (location=1) in vec2 v_texCoords;
 
 		uniform mat4 v_modelViewMat;
 		uniform mat4 v_vertProjMat;
 		uniform mat4 v_texProjMat;
 
 		noperspective out vec4 f_texCoords;
-
 		out float f_z;
 
 		void main()
 		{
 			vec4 projPos = v_vertProjMat * vec4(v_position, 1);
-
 			vec4 texCoords = v_texProjMat * (projPos / projPos.w);
 			f_texCoords = vec4(texCoords.x, texCoords.y, texCoords.z, texCoords.w);
-			f_z = v_position.z;
+			f_z = projPos.z;
 			gl_Position = v_modelViewMat * projPos;
 		}
 		""", GL.GL_VERTEX_SHADER)
@@ -238,8 +219,8 @@ def init():
 		#version 430
 
 		uniform sampler2D f_texUnit;
-		noperspective in vec4 f_texCoords;
 
+		noperspective in vec4 f_texCoords;
 		in float f_z;
 
 		void main()
@@ -248,14 +229,46 @@ def init():
 			//gl_FragColor = texture(f_texUnit, f_texCoords);
 			//vec2 newCoords = vec2(f_texCoords.x / f_texCoords.w, f_texCoords.y / f_texCoords.w);
 			//gl_FragColor = vec4( vec2(f_texCoords.x / f_texCoords.w, f_texCoords.y / f_texCoords.w),0,1);
-			//float z = (1.0 - f_z - 0.7) * 4.0;
+			float z = (1.0 - f_z - 0.6) * 4.0;
 			//gl_FragColor = vec4(z, z, z, 1.0);
 			gl_FragDepth = f_z;
-			gl_FragColor = texture2DProj(f_texUnit, f_texCoords);
+			gl_FragColor = texture2DProj(f_texUnit, f_texCoords) * vec4(z, z, z, 1.0);
 		}
 		""", GL.GL_FRAGMENT_SHADER)
 
 	shaderProgram = GL.shaders.compileProgram(vertexShader, fragmentShader)
+
+	#Shader attributes
+	ATTR_MODELVIEWMAT = GL.glGetUniformLocation(shaderProgram, "v_modelViewMat")
+	ATTR_VERTPROJMAT = GL.glGetUniformLocation(shaderProgram, "v_vertProjMat")
+	ATTR_TEXPROJMAT = GL.glGetUniformLocation(shaderProgram, "v_texProjMat")
+	ATTR_TEXUNIT = GL.glGetUniformLocation(shaderProgram, "f_texUnit")
+
+	VAO_VERTEX = GL.glGenVertexArrays(1)
+	GL.glBindVertexArray(VAO_VERTEX)
+	ATTR_POSITION = GL.glGetAttribLocation(shaderProgram, "v_position")
+	GL.glEnableVertexAttribArray(ATTR_POSITION)
+	GL.glBindVertexArray(0)
+
+	#Load textures
+	texture_surface = sdl2.ext.load_image("C:\\dev\\raycast\\textures.png")
+	sprite_factory = sdl2.ext.SpriteFactory(sprite_type=sdl2.ext.SOFTWARE, renderer=renderer)
+	test_sprite = sprite_factory.create_software_sprite((64, 64))
+	for i in range(8):
+		sdl2.SDL_BlitSurface(
+			texture_surface, sdl2.SDL_Rect(i * 64, 0, 64, 64),
+			test_sprite.surface, sdl2.SDL_Rect(0, 0, 64, 64))
+		pixels = sdl2.ext.pixels2d(test_sprite)
+		pixels = np.copy(pixels)
+
+		texture = GL.glGenTextures(1)
+		GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 1)
+		GL.glBindTexture(GL.GL_TEXTURE_2D, texture)
+		GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA, 64, 64, 0, GL.GL_BGRA, GL.GL_UNSIGNED_INT_8_8_8_8_REV, np.flipud(pixels.T).reshape(64*64))
+		GL.glGenerateMipmap(GL.GL_TEXTURE_2D)
+		GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
+
+		textures.append(texture)
 
 def update():
 	global running
@@ -299,89 +312,7 @@ def render():
 	sdl2.SDL_GL_SwapWindow(window.window)
 
 def run():
-	global VAO_VERTEX
-	global ATTR_POSITION
-	global ATTR_TEXCOORDS
-	global ATTR_TEXUNIT
-	global ATTR_MODELVIEWMAT
-	global ATTR_VERTPROJMAT
-	global ATTR_TEXPROJMAT
-	global ATTR_TEXBOUNDS
-	global textures
-	global test_quad
-
 	init()
-
-	vertices = np.array([
-		-1.0,  1.0, 0.0,
-		 1.0,  0.3, 0.0,
-		 1.0, -0.3, 0.0,
-		-1.0,  1.0, 0.0,
-		 1.0, -0.3, 0.0,
-		-1.0, -1.0, 0.0
-		], dtype=np.float32)
-
-	colors = np.array([
-		1.0, 1.0, 1.0,
-		0.0, 0.0, 0.0,
-		0.0, 0.0, 0.0,
-		0.0, 0.0, 0.0,
-		1.0, 1.0, 1.0,
-		0.0, 0.0, 0.0
-		], dtype=np.float32)
-
-	tex_coords = np.array([
-		0.0, 1.0,
-		1.0, 1.0,
-		1.0, 0.0,
-		0.0, 1.0,
-		1.0, 0.0,
-		0.0, 0.0
-		], dtype=np.float32)
-
-	ATTR_MODELVIEWMAT = GL.glGetUniformLocation(shaderProgram, "v_modelViewMat")
-	ATTR_VERTPROJMAT = GL.glGetUniformLocation(shaderProgram, "v_vertProjMat")
-	ATTR_TEXPROJMAT = GL.glGetUniformLocation(shaderProgram, "v_texProjMat")
-	ATTR_TEXBOUNDS = GL.glGetUniformLocation(shaderProgram, "v_texBounds")
-	ATTR_TEXUNIT = GL.glGetUniformLocation(shaderProgram, "f_texUnit")
-
-	VAO_VERTEX = GL.glGenVertexArrays(1)
-	GL.glBindVertexArray(VAO_VERTEX)
-	ATTR_POSITION = GL.glGetAttribLocation(shaderProgram, "v_position")
-	GL.glEnableVertexAttribArray(ATTR_POSITION)
-	GL.glBindVertexArray(0)
-
-	#VBO_positions = GL.glGenBuffers(1)
-	#GL.glBindBuffer(GL.GL_ARRAY_BUFFER, VBO_positions)
-	#GL.glBufferData(GL.GL_ARRAY_BUFFER, test_quads[0].VBO.nbytes, test_quads[0].VBO, GL.GL_STATIC_DRAW)
-
-	#VBO_tex_coords = GL.glGenBuffers(1)
-	#GL.glBindBuffer(GL.GL_ARRAY_BUFFER, VBO_tex_coords)
-	#GL.glBufferData(GL.GL_ARRAY_BUFFER, tex_coords.nbytes, tex_coords, GL.GL_STATIC_DRAW)
-
-	# ATTR_TEXCOORDS = GL.glGetAttribLocation(shaderProgram, "v_texCoords")
-	# GL.glEnableVertexAttribArray(ATTR_TEXCOORDS)
-	# GL.glBindBuffer(GL.GL_ARRAY_BUFFER, VBO_tex_coords)
-	# GL.glVertexAttribPointer(ATTR_TEXCOORDS, 2, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
-
-	texture_surface = sdl2.ext.load_image("C:\\dev\\raycast\\textures.png")
-	sprite_factory = sdl2.ext.SpriteFactory(sprite_type=sdl2.ext.SOFTWARE, renderer=renderer)
-	test_sprite = sprite_factory.create_software_sprite((64, 64))
-	for i in range(8):
-		sdl2.SDL_BlitSurface(
-			texture_surface, sdl2.SDL_Rect(i * 64, 0, 64, 64),
-			test_sprite.surface, sdl2.SDL_Rect(0, 0, 64, 64))
-		pixels = sdl2.ext.pixels2d(test_sprite)
-		pixels = np.copy(pixels)
-
-		texture = GL.glGenTextures(1)
-		GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 1)
-		GL.glBindTexture(GL.GL_TEXTURE_2D, texture)
-		GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA, 64, 64, 0, GL.GL_BGRA, GL.GL_UNSIGNED_INT_8_8_8_8_REV, np.flipud(pixels.T).reshape(64*64))
-		GL.glGenerateMipmap(GL.GL_TEXTURE_2D)
-		GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
-
-		textures.append(texture)
 
 	test_tris.append(TriQuad(
 		np.array([
