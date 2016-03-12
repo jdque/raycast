@@ -33,9 +33,9 @@ def render_camera(camera):
 	renderer.draw_line((int(camera.pos[0]), int(camera.pos[1]), int(plane_p0[0]), int(plane_p0[1])), 0xFFF0000)
 	renderer.draw_line((int(camera.pos[0]), int(camera.pos[1]), int(plane_p1[0]), int(plane_p1[1])), 0xFFF0000)
 
-	clip_p0 = camera.pos + camera.clip_dir - camera.clip_plane
-	clip_p1 = camera.pos + camera.clip_dir + camera.clip_plane
-	renderer.draw_line((int(clip_p0[0]), int(clip_p0[1]), int(clip_p1[0]), int(clip_p1[1])), 0xFFF0000)
+	near_p0 = camera.pos + camera.near_dir - camera.near_plane
+	near_p1 = camera.pos + camera.near_dir + camera.near_plane
+	renderer.draw_line((int(near_p0[0]), int(near_p0[1]), int(near_p1[0]), int(near_p1[1])), 0xFFF0000)
 
 def render_border(plane):
 	renderer.draw_line((int(plane[X]), int(plane[Y]), int(plane[X] + plane[W]), int(plane[Y])), 0xFFF0000)
@@ -87,7 +87,7 @@ def run():
 
 	camera = Camera()
 	camera.move_to(224, 288)
-	camera.set_fov(60, 480, 320, 16, 1000)
+	camera.set_fov(60, 480, 320, 32, 1000)
 
 	running = True
 	while running:
