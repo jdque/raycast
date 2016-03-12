@@ -40,7 +40,7 @@ def render_raycast(camera, tilemap):
 	quads = get_tri_quads(wall_pts + floor_pts, camera)
 	for quad in quads:
 		pos = quad[2]
-		o_tri = np.c_[quad[0], np.zeros(4)]
+		o_tri = quad[0]
 		t_tri = np.c_[quad[1], np.zeros(4)]
 		offset = np.c_[quad[3], np.zeros(4)]
 
@@ -93,28 +93,29 @@ render_plane = (0, 0, 960, 640)
 palette = TilePalette()
 palette.add(0, 0, 0.0, 8, 2)
 palette.add(1, 1, 1.0, 8, 2)
-palette.add(2, 1, 0.2, 8, 7)
+palette.add(2, 1, 0.25, 8, 7)
+palette.add(3, 1, 0.5, 8, 7)
 
 tilemap = TileMap(7, 7, 64)
 tilemap.set_tiles_from_palette(palette,
    [[1,1,1,1,1,1,1],
-	[1,0,0,1,0,0,1],
-	[1,0,2,2,0,0,1],
-	[1,0,2,0,0,0,1],
+	[1,0,0,1,1,0,1],
+	[1,0,0,2,2,0,1],
+	[1,0,0,0,0,0,1],
 	[1,0,0,0,0,0,1],
 	[1,0,0,0,0,0,1],
 	[1,1,1,1,1,1,1]])
 
 camera = Camera()
 camera.move_to(224, 288)
-camera.set_fov(60, 120, 80, 32)
+camera.set_fov(60, 120, 80, 16)
 
 #------------------------------------------------------------------------------------------
 
 class TriQuad:
 	def __init__(self, original, transformed, model_view_mat, texture_bounds, texture_id):
 		self.model_view_mat = model_view_mat
-		self.vert_proj_mat = make_proj_mat(original, transformed)
+		self.vert_proj_mat = make_proj_mat(original[:,0:2], transformed)
 		self.tex_proj_mat = make_proj_mat(transformed, texture_bounds)
 
 		self.vertices = np.array(original[0:3], dtype=np.float32).flatten()
@@ -220,12 +221,15 @@ def init():
 
 		noperspective out vec4 f_texCoords;
 
+		out float f_z;
+
 		void main()
 		{
 			vec4 projPos = v_vertProjMat * vec4(v_position, 1);
 
 			vec4 texCoords = v_texProjMat * (projPos / projPos.w);
 			f_texCoords = vec4(texCoords.x, texCoords.y, texCoords.z, texCoords.w);
+			f_z = v_position.z;
 			gl_Position = v_modelViewMat * projPos;
 		}
 		""", GL.GL_VERTEX_SHADER)
@@ -236,6 +240,8 @@ def init():
 		uniform sampler2D f_texUnit;
 		noperspective in vec4 f_texCoords;
 
+		in float f_z;
+
 		void main()
 		{
 			//gl_FragColor = vec4(color, 1.0);
@@ -243,6 +249,10 @@ def init():
 			//vec2 newCoords = vec2(f_texCoords.x / f_texCoords.w, f_texCoords.y / f_texCoords.w);
 			gl_FragColor = texture2DProj(f_texUnit, f_texCoords);
 			//gl_FragColor = vec4( vec2(f_texCoords.x / f_texCoords.w, f_texCoords.y / f_texCoords.w),0,1);
+			//float z = (1.0 - f_texCoords.z - 0.7) * 4.0;
+			//float z = (1.0 - gl_FragCoord.z - 0.3) * 4.0;
+			//float z = (1.0 - f_z - 0.7) * 4.0;
+			//gl_FragColor = vec4(z, z, z, 1);
 		}
 		""", GL.GL_FRAGMENT_SHADER)
 

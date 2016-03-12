@@ -43,7 +43,7 @@ class TileMap:
 	def get_tile_px(self, x, y):
 		tx = int(x / self.size)
 		ty = int(y / self.size)
-		if tx >= self.width or ty >= self.height:
+		if tx < 0 or tx >= self.width or ty < 0 or ty >= self.height:
 			return None
 		return self.tiles[ty][tx]
 
@@ -304,50 +304,65 @@ def get_clipped_tile_points(tilemap, camera):
 		stop = False
 		cur_height = 0
 		for collision, side in dda(camera.pos, ray, 64, tilemap):
-			if stop:
-				stop = False
+			tile = tilemap.get_tile_px(collision[X], collision[Y])
+
+			if tile is None or stop:
 				break
 
-			tile = tilemap.get_tile_px(collision[X], collision[Y])
 			tile_coords = [int(collision[X]) / 64, int(collision[Y]) / 64]
 			tile_height = tile["floor_height"]
 
-			changed = False
+			render_floor = False
+			render_wall = False
 			if tile_height > cur_height:
-				cur_height = tile_height
-				changed = True
-			if cur_height >= max_height:
+				render_wall = True
+			if tile_height < 0.5:
+				render_floor = True
+			if tile_height >= max_height:
 				stop = True
+
+			cur_height = tile_height
 
 			if (int(collision[X]) + 1) % 64 <= 1.0 and (int(collision[Y]) + 1) % 64 <= 1.0:
 				continue
 
-			if not changed:
+			#floor
+			if render_floor:
 				key = (tile_coords[X], tile_coords[Y])
-			else:
-				key = (tile_coords[X], tile_coords[Y], side)
-			if key in used_tiles:
-				continue
-			used_tiles.add(key)
+				if key not in used_tiles:
+					used_tiles.add(key)
+					ul = np.array([tile_coords[X] * 64, tile_coords[Y] * 64])
+					ur = np.array([tile_coords[X] * 64 + 64, tile_coords[Y] * 64])
+					br = np.array([tile_coords[X] * 64 + 64, tile_coords[Y] * 64 + 64])
+					bl = np.array([tile_coords[X] * 64, tile_coords[Y] * 64 + 64])
+					clip_pts = clip_floor(ul, ur, br, bl, camera)
+					floor_pts.append((clip_pts, [ul, br], tile, 0))
 
-			if not stop:
-				ul = np.array([tile_coords[X] * 64, tile_coords[Y] * 64])
-				ur = np.array([tile_coords[X] * 64 + 64, tile_coords[Y] * 64])
-				br = np.array([tile_coords[X] * 64 + 64, tile_coords[Y] * 64 + 64])
-				bl = np.array([tile_coords[X] * 64, tile_coords[Y] * 64 + 64])
-				clip_pts = clip_floor(ul, ur, br, bl, camera)
-				floor_pts.append((clip_pts, [ul, br], tile, 0))
-			if changed:
-				if side == 0:
-					y = int(collision[Y] + 32 - (collision[Y] + 32) % 64)
-					left = np.array([tile_coords[X] * 64, y])
-					right = np.array([tile_coords[X] * 64 + 64, y])
-				else:
-					x = int(collision[X] + 32 - (collision[X] + 32) % 64)
-					left = np.array([x, tile_coords[Y] * 64])
-					right = np.array([x, tile_coords[Y] * 64 + 64])
-				clip_pts = clip_wall(left, right, camera)
-				wall_pts.append((clip_pts, [left, right], tile, 1))
+			#wall
+			if render_wall:
+				key = (tile_coords[X], tile_coords[Y], side)
+				if key not in used_tiles and render_wall:
+					used_tiles.add(key)
+					if side == 0:
+						y = int(collision[Y] + 32 - (collision[Y] + 32) % 64)
+						if int(collision[Y]) % 64 <= 1.0:
+							left = np.array([tile_coords[X] * 64 + 64, y])
+							right = np.array([tile_coords[X] * 64, y])
+						else:
+							left = np.array([tile_coords[X] * 64, y])
+							right = np.array([tile_coords[X] * 64 + 64, y])
+					else:
+						x = int(collision[X] + 32 - (collision[X] + 32) % 64)
+						if int(collision[X]) % 64 <= 1.0:
+							left = np.array([x, tile_coords[Y] * 64])
+							right = np.array([x, tile_coords[Y] * 64 + 64])
+						else:
+							left = np.array([x, tile_coords[Y] * 64 + 64])
+							right = np.array([x, tile_coords[Y] * 64])
+
+					clip_pts = clip_wall(left, right, camera)
+					wall_pts.append((clip_pts, [left, right], tile, 1))
+
 
 	return floor_pts, wall_pts
 
@@ -372,8 +387,13 @@ def get_tri_quads(tile_pts, camera):
 				og_pts = []
 				d_mid = np.array([camera.width / 2 - tri_quad[3][X], camera.height / 2 - tri_quad[3][Y]])
 				for pt in tri_quad:
+					###
+					vector = pt - camera.pos
+					proj = camera.dir * (np.dot(vector, camera.dir) / np.dot(camera.dir, camera.dir))
+					z = np.linalg.norm(proj) / (np.linalg.norm(camera.dir) + 1000)
+					###
 					d = pt + d_mid
-					og_pts.append([(d[X] / camera.width - 0.5) * 2, (d[Y] / camera.height - 0.5) * 2])
+					og_pts.append([(d[X] / camera.width - 0.5) * 2, (d[Y] / camera.height - 0.5) * 2, z])
 				og_pts = np.array(og_pts)
 
 				trans_pts = []
@@ -431,15 +451,24 @@ def get_tri_quads(tile_pts, camera):
 			|    \|
 			-------
 			"""
+			###
+			vector = tile_pt[0][0] - camera.pos
+			proj = camera.dir * (np.dot(vector, camera.dir) / np.dot(camera.dir, camera.dir))
+			zl = np.linalg.norm(proj) / (np.linalg.norm(camera.dir) + 1000)
+			vector = tile_pt[0][1] - camera.pos
+			proj = camera.dir * (np.dot(vector, camera.dir) / np.dot(camera.dir, camera.dir))
+			zr = np.linalg.norm(proj) / (np.linalg.norm(camera.dir) + 1000)
+			###
 			w = np.linalg.norm(tile_pt[0][1] - tile_pt[0][0])
 			o_l = ((camera.width / 2. - w / 2.) / camera.width - 0.5) * 2
 			o_r = ((camera.width / 2. + w / 2.) / camera.width - 0.5) * 2
 			o_t = ((camera.height / 2. - 32) / camera.height - 0.5) * 2
 			o_b = ((camera.height / 2. + 32) / camera.height - 0.5) * 2
-			o_ul = [o_l, o_t]
-			o_ur = [o_r, o_t]
-			o_br = [o_r, o_b]
-			o_bl = [o_l, o_b]
+			o_ul = [o_l, o_t, zl]
+			o_ur = [o_r, o_t, zr]
+			o_br = [o_r, o_b, zr]
+			o_bl = [o_l, o_b, zl]
+
 
 			l_third = abs(trans_pts[1] - trans_pts[0]) * 1/3.
 			r_third = abs(trans_pts[3] - trans_pts[2]) * 1/3.

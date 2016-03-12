@@ -53,6 +53,8 @@ def render_scan(camera, tilemap):
 			renderer.draw_line((int(tri[1][X]), int(tri[1][Y]), int(tri[2][X]), int(tri[2][Y])), 0x8000FFFF)
 			mid = np.average(tri[0:3], axis=0)
 			renderer.fill((int(mid[X]) - 2, int(mid[Y]) - 2, 4, 4), 0x8000FFFF)
+	for wall_pt in wall_pts:
+		renderer.draw_line((int(wall_pt[0][0][X]), int(wall_pt[0][0][Y]), int(wall_pt[0][1][X]), int(wall_pt[0][1][Y])), 0xFFFF00FF)
 
 	quads = get_tri_quads(floor_pts + wall_pts, camera)
 	for quad in quads:
@@ -68,16 +70,17 @@ def run():
 	# texture_sprite = factory.from_surface(texture_surface)
 
 	palette = TilePalette()
-	palette.add(0, 0, 0.0, 7, 1)
-	palette.add(1, 1, 1.0, 7, 1)
-	palette.add(2, 1, 0.2, 7, 1)
+	palette.add(0, 0, 0.0, 8, 2)
+	palette.add(1, 1, 1.0, 8, 2)
+	palette.add(2, 1, 0.25, 8, 7)
+	palette.add(3, 1, 0.5, 8, 7)
 
 	tilemap = TileMap(7, 7, 64)
 	tilemap.set_tiles_from_palette(palette,
 	   [[1,1,1,1,1,1,1],
 		[1,0,0,1,0,0,1],
-		[1,0,2,2,0,0,1],
-		[1,0,2,0,0,0,1],
+		[1,0,0,3,3,0,1],
+		[1,0,0,2,2,0,1],
 		[1,0,0,0,0,0,1],
 		[1,0,0,0,0,0,1],
 		[1,1,1,1,1,1,1]])
