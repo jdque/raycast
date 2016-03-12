@@ -148,14 +148,10 @@ def dda(origin, dir, step, tilemap):
 
 	x = side_x
 	y = side_y
-	if delt_y > 3000:
-		y = 2999
-	if delt_x > 3000:
-		x = 2999
 
 	yield origin, None
 
-	while x < 3000 or y < 3000:
+	while True:
 		if x < y:
 			hit = origin + dir * abs(x)
 			side = 1
@@ -165,13 +161,6 @@ def dda(origin, dir, step, tilemap):
 			side = 0
 			y += delt_y
 		yield hit, side
-
-		# if (int(hit[0]) + 1) % 64 <= 1.0 and (int(hit[1]) + 1) % 64 <= 1.0:
-		# 	if int(hit[0] / 64) != int(origin[0] / 64) and int(hit[1] / 64) != int(origin[1] / 64):
-		# 		if tilemap.get_tile_px(hit[0] - 1, hit[1] - 1) != 0 or tilemap.get_tile_px(hit[0] + 1, hit[1] - 1) != 0 or tilemap.get_tile_px(hit[0] - 1, hit[1] + 1) != 0 or tilemap.get_tile_px(hit[0] + 1, hit[1] + 1) != 0:
-		# 			collisions.append(hit)
-		# 			break
-		# collisions.append(hit)
 
 def project_point(pt, camera, y_sign=1):
 	vector = pt - camera.pos
