@@ -92,16 +92,16 @@ class Camera:
 	def tilt_by(self, distance):
 		self.horizon_y += distance
 
-	def set_fov(self, angle, near, far, plane_width, plane_height):
+	def set_fov(self, angle, near, far, proj_width, proj_height):
 		self.angle = float(angle)
 		self.near = float(near)
 		self.far = float(far)
-		self.width = float(plane_width)
-		self.height = float(plane_height)
-		self.horizon_y = float(plane_height) / 2
+		self.proj_width = float(proj_width)
+		self.proj_height = float(proj_height)
+		self.horizon_y = float(proj_height) / 2
 
-		self.dir = np.array([(self.width / 2) / np.tan(np.deg2rad(self.angle / 2)), 0])
-		self.plane = np.array([0, self.width / 2])
+		self.dir = np.array([(self.proj_width / 2) / np.tan(np.deg2rad(self.angle / 2)), 0])
+		self.plane = np.array([0, self.proj_width / 2])
 		self.near_dir = np.array([self.near, 0])
 		self.near_plane = np.array([0, self.near * np.tan(np.deg2rad(self.angle / 2))])
 		self.rays = self.generate_rays()
@@ -109,7 +109,7 @@ class Camera:
 	def generate_rays(self):
 		rays = []
 		unit_plane = self.plane / math.sqrt(self.plane[0]**2 + self.plane[1]**2)
-		for i in range(int(-self.width / 2), int(self.width / 2)):
+		for i in range(int(-self.proj_width / 2), int(self.proj_width / 2)):
 			plane_pt = self.dir + (unit_plane * i)
 			unit_ray = plane_pt / math.sqrt(plane_pt[0]**2 + plane_pt[1]**2)
 			rays.append(unit_ray)
@@ -182,7 +182,7 @@ def project_point(pt, camera, y_sign=1):
 	height = 16 * np.linalg.norm(camera.dir) / (proj_len)
 	y = camera.horizon_y + (y_sign * height)
 
-	return [(x / camera.width - 0.5) * 2, (y / camera.height - 0.5) * 2]
+	return [(x / camera.proj_width - 0.5) * 2, (y / camera.proj_height - 0.5) * 2]
 
 def clip_floor(ul, ur, br, bl, camera):
 	edges = [
@@ -364,7 +364,7 @@ def get_tri_quads(tile_pts, camera):
 
 			for tri_quad in tri_quads:
 				og_pts = []
-				d_mid = np.array([camera.width / 2 - tri_quad[3][X], camera.height / 2 - tri_quad[3][Y]])
+				d_mid = np.array([camera.proj_width / 2 - tri_quad[3][X], camera.proj_height / 2 - tri_quad[3][Y]])
 				for pt in tri_quad:
 					###
 					vector = pt - camera.pos
@@ -372,14 +372,14 @@ def get_tri_quads(tile_pts, camera):
 					z = np.linalg.norm(proj) / (camera.far - camera.near)
 					###
 					d = pt + d_mid
-					og_pts.append([(d[X] / camera.width - 0.5) * 2, (d[Y] / camera.height - 0.5) * 2, z])
+					og_pts.append([(d[X] / camera.proj_width - 0.5) * 2, (d[Y] / camera.proj_height - 0.5) * 2, z])
 				og_pts = np.array(og_pts)
 
 				trans_pts = []
 				for pt in tri_quad:
 					trans_pt = project_point(pt, camera, 1)
 					if trans_pt is not None:
-						height = trans_pt[Y] * 2 - ((camera.horizon_y / camera.height - 0.5) * 2) * 2
+						height = trans_pt[Y] * 2 - ((camera.horizon_y / camera.proj_height - 0.5) * 2) * 2
 						trans_pt[Y] = trans_pt[Y] - height * tile["floor_height"]
 						trans_pts.append(trans_pt)
 				trans_pts = np.array(trans_pts)
@@ -406,7 +406,7 @@ def get_tri_quads(tile_pts, camera):
 			for pt in tile_pt[0]:
 				bottom_pt = project_point(pt, camera, 1)
 				if bottom_pt is not None:
-					height = bottom_pt[Y] * 2 - ((camera.horizon_y / camera.height - 0.5) * 2) * 2
+					height = bottom_pt[Y] * 2 - ((camera.horizon_y / camera.proj_height - 0.5) * 2) * 2
 					top_pt = np.array([bottom_pt[X], bottom_pt[Y] - height * tile["floor_height"]])
 					trans_pts.append(top_pt)
 					trans_pts.append(bottom_pt)
@@ -439,10 +439,10 @@ def get_tri_quads(tile_pts, camera):
 			zr =  np.linalg.norm(proj) / (camera.far - camera.near)
 			###
 			w = np.linalg.norm(tile_pt[0][1] - tile_pt[0][0])
-			o_l = ((camera.width / 2. - w / 2.) / camera.width - 0.5) * 2
-			o_r = ((camera.width / 2. + w / 2.) / camera.width - 0.5) * 2
-			o_t = ((camera.height / 2. - 32) / camera.height - 0.5) * 2
-			o_b = ((camera.height / 2. + 32) / camera.height - 0.5) * 2
+			o_l = ((camera.proj_width / 2. - w / 2.) / camera.proj_width - 0.5) * 2
+			o_r = ((camera.proj_width / 2. + w / 2.) / camera.proj_width - 0.5) * 2
+			o_t = ((camera.proj_height / 2. - 32) / camera.proj_height - 0.5) * 2
+			o_b = ((camera.proj_height / 2. + 32) / camera.proj_height - 0.5) * 2
 			o_ul = [o_l, o_t, zl]
 			o_ur = [o_r, o_t, zr]
 			o_br = [o_r, o_b, zr]

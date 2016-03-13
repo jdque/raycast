@@ -80,14 +80,3 @@ def triangulate(pts):
 	for i in range(1, len(pts) - 1):
 		tris.append([pts[0], pts[i], pts[i+1]])
 	return tris
-
-def triangulate2(pts):
-	tris = []
-	if len(pts) < 3:
-		return tris
-
-	mid = np.average(pts, axis=0)
-	for i in range(0, len(pts) - 1):
-		tris.append([mid, pts[i], pts[i+1]])
-	tris.append([mid, pts[len(pts) - 1], pts[0]])
-	return tris
