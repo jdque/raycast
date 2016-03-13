@@ -39,8 +39,8 @@ def render_raycast(camera, tilemap):
 	for quad in quads:
 		pos = quad[2]
 		o_tri = quad[0]
-		t_tri = np.c_[quad[1], np.zeros(4)]
-		offset = np.c_[quad[3], np.zeros(4)]
+		t_tri = quad[1]
+		offset = quad[3]
 
 		o_tri[:,1] *= -1
 		t_tri[:,1] *= -1
@@ -105,7 +105,7 @@ camera.set_fov(60, 16, 1000, 120, 80)
 class TriQuad:
 	def __init__(self, original, transformed, model_view_mat, texture_bounds, texture_id):
 		self.model_view_mat = model_view_mat
-		self.vert_proj_mat = make_proj_mat(original[:,0:2], transformed)
+		self.vert_proj_mat = make_proj_mat(original, transformed)
 		self.tex_proj_mat = make_proj_mat(transformed, texture_bounds)
 
 		self.vertices = original[0:3].ravel().astype(np.float32)

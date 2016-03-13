@@ -182,7 +182,12 @@ def project_point(pt, camera, y_sign=1):
 	height = 16 * np.linalg.norm(camera.dir) / (proj_len)
 	y = camera.horizon_y + (y_sign * height)
 
-	return [(x / camera.proj_width - 0.5) * 2, (y / camera.proj_height - 0.5) * 2]
+	return [x, y]
+
+def normalize_projection_points(pts, camera):
+	pts[:,0:2] /= [camera.proj_width, camera.proj_height]
+	pts[:,0:2] -= 0.5
+	pts[:,0:2] *= 2
 
 def clip_floor(ul, ur, br, bl, camera):
 	edges = [
@@ -280,7 +285,7 @@ def get_clipped_tile_points(tilemap, camera):
 
 	for ray in camera.rays:
 		stop = False
-		cur_height = 0
+		cur_height = 0.0
 		for collision, side in dda(camera.pos, ray, 64, tilemap):
 			tile = tilemap.get_tile_px(collision[X], collision[Y])
 
@@ -296,6 +301,7 @@ def get_clipped_tile_points(tilemap, camera):
 				render_wall = True
 			if abs(cur_height + tile_height - camera_height) < 0.5:
 				render_floor = True
+
 			if tile_height >= max_height:
 				stop = True
 
@@ -338,7 +344,6 @@ def get_clipped_tile_points(tilemap, camera):
 						else:
 							left = np.array([x, tile_coords[Y] * 64 + 64])
 							right = np.array([x, tile_coords[Y] * 64])
-
 					clip_pts = clip_wall(left, right, camera)
 					wall_pts.append((clip_pts, [left, right], tile, 1))
 
@@ -372,17 +377,21 @@ def get_tri_quads(tile_pts, camera):
 					z = np.linalg.norm(proj) / (camera.far - camera.near)
 					###
 					d = pt + d_mid
-					og_pts.append([(d[X] / camera.proj_width - 0.5) * 2, (d[Y] / camera.proj_height - 0.5) * 2, z])
+					og_pts.append([d[X], d[Y], z])
 				og_pts = np.array(og_pts)
+				normalize_projection_points(og_pts, camera)
 
 				trans_pts = []
 				for pt in tri_quad:
 					trans_pt = project_point(pt, camera, 1)
 					if trans_pt is not None:
-						height = trans_pt[Y] * 2 - ((camera.horizon_y / camera.proj_height - 0.5) * 2) * 2
-						trans_pt[Y] = trans_pt[Y] - height * tile["floor_height"]
-						trans_pts.append(trans_pt)
+						height = (trans_pt[Y] - camera.horizon_y) * 2 * tile["floor_height"]
+						trans_pt[Y] -= height
+						trans_pts.append([trans_pt[X], trans_pt[Y], 0.0])
+				if len(trans_pts) != 4:
+					continue
 				trans_pts = np.array(trans_pts)
+				normalize_projection_points(trans_pts, camera)
 
 				trans_mid_pt = np.average(trans_pts[0:3], axis=0)
 				trans_pts -= trans_mid_pt
@@ -394,8 +403,7 @@ def get_tri_quads(tile_pts, camera):
 					[(tri_quad[3][X] - tile_x) * recp_tile_w, (tri_quad[3][Y] - tile_y) * recp_tile_h],
 					])
 
-				if len(trans_pts) == 4:
-					final_quads.append((og_pts, trans_pts, trans_mid_pt, offsets, tile, surface_type))
+				final_quads.append((og_pts, trans_pts, trans_mid_pt, offsets, tile, surface_type))
 		elif surface_type == 1: #wall
 			#temp - append tri midpoints
 			clip_w = abs(tile_pt[0][1] - tile_pt[0][0])
@@ -406,20 +414,18 @@ def get_tri_quads(tile_pts, camera):
 			for pt in tile_pt[0]:
 				bottom_pt = project_point(pt, camera, 1)
 				if bottom_pt is not None:
-					height = bottom_pt[Y] * 2 - ((camera.horizon_y / camera.proj_height - 0.5) * 2) * 2
-					top_pt = np.array([bottom_pt[X], bottom_pt[Y] - height * tile["floor_height"]])
-					trans_pts.append(top_pt)
-					trans_pts.append(bottom_pt)
+					height = (bottom_pt[Y] - camera.horizon_y) * 2 * tile["floor_height"]
+					trans_pts.append([bottom_pt[X], bottom_pt[Y] - height, 0.0]) #top
+					trans_pts.append([bottom_pt[X], bottom_pt[Y], 0.0]) #bottom
+			if len(trans_pts) != 8:
+				continue
+			trans_pts = np.array(trans_pts)
+			normalize_projection_points(trans_pts, camera)
 
 			#get offsets relative to tile width
 			recp_tile_w = 1. / np.linalg.norm(tile_pt[1][1] - tile_pt[1][0])
 			offset_l = np.linalg.norm(tile_pt[0][0] - tile_pt[1][0]) * recp_tile_w
 			offset_r = np.linalg.norm(tile_pt[0][1] - tile_pt[1][0]) * recp_tile_w
-
-			if len(trans_pts) != 8:
-				continue
-
-			trans_pts = np.array(trans_pts)
 
 			"""
 			-------
@@ -439,15 +445,14 @@ def get_tri_quads(tile_pts, camera):
 			zr =  np.linalg.norm(proj) / (camera.far - camera.near)
 			###
 			w = np.linalg.norm(tile_pt[0][1] - tile_pt[0][0])
-			o_l = ((camera.proj_width / 2. - w / 2.) / camera.proj_width - 0.5) * 2
-			o_r = ((camera.proj_width / 2. + w / 2.) / camera.proj_width - 0.5) * 2
-			o_t = ((camera.proj_height / 2. - 32) / camera.proj_height - 0.5) * 2
-			o_b = ((camera.proj_height / 2. + 32) / camera.proj_height - 0.5) * 2
+			o_l = camera.proj_width / 2. - w / 2.
+			o_r = camera.proj_width / 2. + w / 2.
+			o_t = camera.proj_height / 2. - 32
+			o_b = camera.proj_height / 2. + 32
 			o_ul = [o_l, o_t, zl]
 			o_ur = [o_r, o_t, zr]
 			o_br = [o_r, o_b, zr]
 			o_bl = [o_l, o_b, zl]
-
 
 			l_third = abs(trans_pts[1] - trans_pts[0]) * 1/3.
 			r_third = abs(trans_pts[3] - trans_pts[2]) * 1/3.
@@ -459,11 +464,14 @@ def get_tri_quads(tile_pts, camera):
 				o_bl,
 				np.average([o_ul, o_br, o_bl], axis=0)
 				])
+			normalize_projection_points(og_pts, camera)
+			proj_mid = intersect_segments(
+				trans_pts[1][0:2] - l_third[0:2], trans_pts[3][0:2] - r_third[0:2], trans_pts[4][0:2], trans_pts[5][0:2])
 			tr_pts = np.array([
 				trans_pts[0],
 				trans_pts[3],
 				trans_pts[1],
-				intersect_segments(trans_pts[1] - l_third , trans_pts[3] - r_third, trans_pts[4], trans_pts[5])
+				[proj_mid[X], proj_mid[Y], 0.0]
 				])
 			mid = np.average(tr_pts[0:3], axis=0)
 			tr_pts -= mid
@@ -482,11 +490,14 @@ def get_tri_quads(tile_pts, camera):
 				o_br,
 				np.average([o_ul, o_ur, o_br], axis=0)
 				])
+			normalize_projection_points(og_pts, camera)
+			proj_mid = intersect_segments(
+				trans_pts[0][0:2] + l_third[0:2], trans_pts[2][0:2] + r_third[0:2], trans_pts[6][0:2], trans_pts[7][0:2])
 			tr_pts = np.array([
 				trans_pts[0],
 				trans_pts[2],
 				trans_pts[3],
-				intersect_segments(trans_pts[0] + l_third, trans_pts[2] + r_third, trans_pts[6], trans_pts[7])
+				[proj_mid[X], proj_mid[Y], 0.0]
 				])
 			mid = np.average(tr_pts[0:3], axis=0)
 			tr_pts -= mid
