@@ -164,25 +164,23 @@ def dda(origin, dir, step, tilemap):
 
 def project_point(pt, camera, y_sign=1):
 	vector = pt - camera.pos
-	proj = camera.dir * (np.dot(vector, camera.dir) / np.dot(camera.dir, camera.dir))
+	proj = camera.near_dir * (np.dot(vector, camera.near_dir) / np.dot(camera.near_dir, camera.near_dir))
 	rej = vector - proj
 	proj_len = np.linalg.norm(proj)
 	rej_len = np.linalg.norm(rej)
-	scaled_rej_len = np.linalg.norm(camera.dir) / proj_len * rej_len
+	scaled_rej_len = np.linalg.norm(camera.near_dir) / proj_len * rej_len
 	scaled_rej = rej / rej_len * scaled_rej_len
 
 	if proj_len == 0 or rej_len == 0:
 		return None
 
-	# angle = np.deg2rad(camera.angle) - np.arctan2(vector[Y], vector[X])
-	# height_factor = 64 * np.linalg.norm(camera.dir)
-	# height = height_factor / (np.linalg.norm(vector) * math.cos(angle))
-	x_sign = np.sign(np.dot((camera.plane + scaled_rej), camera.plane))
-	x = x_sign * np.linalg.norm(camera.plane + scaled_rej)
-	height = 16 * np.linalg.norm(camera.dir) / (proj_len)
-	y = camera.horizon_y + (y_sign * height)
+	x_sign = np.sign(np.dot((camera.near_plane + scaled_rej), camera.near_plane))
+	x = x_sign * np.linalg.norm(camera.near_plane + scaled_rej)
+	height = np.linalg.norm(camera.near_dir) / (proj_len)
+	y = y_sign * height
 
-	return [x, y]
+	return [x * (np.linalg.norm(camera.plane) / np.linalg.norm(camera.near_plane)),
+			y * (np.linalg.norm(camera.dir) / np.linalg.norm(camera.near_dir)) * 0.5]
 
 def normalize_projection_points(pts, camera):
 	pts[:,0:2] /= [camera.proj_width, camera.proj_height]
@@ -373,7 +371,7 @@ def get_tri_quads(tile_pts, camera):
 				for pt in tri_quad:
 					###
 					vector = pt - camera.pos
-					proj = camera.dir * (np.dot(vector, camera.dir) / np.dot(camera.dir, camera.dir))
+					proj = camera.near_dir * (np.dot(vector, camera.near_dir) / np.dot(camera.near_dir, camera.near_dir))
 					z = np.linalg.norm(proj) / (camera.far - camera.near)
 					###
 					d = pt + d_mid
@@ -385,9 +383,9 @@ def get_tri_quads(tile_pts, camera):
 				for pt in tri_quad:
 					trans_pt = project_point(pt, camera, 1)
 					if trans_pt is not None:
-						height = (trans_pt[Y] - camera.horizon_y) * 2 * tile["floor_height"]
-						trans_pt[Y] -= height
-						trans_pts.append([trans_pt[X], trans_pt[Y], 0.0])
+						trans_pt[Y] *= 64
+						off_height = 2 * trans_pt[Y] * tile["floor_height"]
+						trans_pts.append([trans_pt[X], trans_pt[Y] + camera.horizon_y - off_height, 0.0])
 				if len(trans_pts) != 4:
 					continue
 				trans_pts = np.array(trans_pts)
@@ -414,9 +412,10 @@ def get_tri_quads(tile_pts, camera):
 			for pt in tile_pt[0]:
 				bottom_pt = project_point(pt, camera, 1)
 				if bottom_pt is not None:
-					height = (bottom_pt[Y] - camera.horizon_y) * 2 * tile["floor_height"]
-					trans_pts.append([bottom_pt[X], bottom_pt[Y] - height, 0.0]) #top
-					trans_pts.append([bottom_pt[X], bottom_pt[Y], 0.0]) #bottom
+					bottom_pt[Y] *= 64
+					top_height = 2 * bottom_pt[Y] * tile["floor_height"]
+					trans_pts.append([bottom_pt[X], bottom_pt[Y] + camera.horizon_y - top_height, 0.0]) #top
+					trans_pts.append([bottom_pt[X], bottom_pt[Y] + camera.horizon_y, 0.0]) #bottom
 			if len(trans_pts) != 8:
 				continue
 			trans_pts = np.array(trans_pts)
