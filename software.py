@@ -70,10 +70,10 @@ def run():
 	# texture_sprite = factory.from_surface(texture_surface)
 
 	palette = TilePalette()
-	palette.add(0, 0, 0.0, 8, 2)
-	palette.add(1, 1, 1.0, 8, 2)
-	palette.add(2, 1, -1.0, 8, 7)
-	palette.add(3, 1, 0.5, 8, 7)
+	palette.add(0, 0, 0, 8, 2)
+	palette.add(1, 1, 64, 8, 2)
+	palette.add(2, 1, -64, 8, 7)
+	palette.add(3, 1, 32, 8, 7)
 
 	tilemap = TileMap(7, 7, 64)
 	tilemap.set_tiles_from_palette(palette,
@@ -86,7 +86,7 @@ def run():
 		[1,1,1,1,1,1,1]])
 
 	camera = Camera()
-	camera.move_to(224, 288)
+	camera.move_to(224, 288, 32)
 	camera.set_fov(60, 32, 1000, 480, 320)
 
 	running = True
@@ -111,9 +111,9 @@ def run():
 		elif key_states[sdl2.SDL_SCANCODE_RIGHT]:
 			camera.rotate_by(5)
 		if key_states[sdl2.SDL_SCANCODE_W]:
-			camera.height += 0.05
+			camera.move_by(0, 0, 4)
 		elif key_states[sdl2.SDL_SCANCODE_S]:
-			camera.height -= 0.05
+			camera.move_by(0, 0, -4)
 
 		#render
 		renderer.clear(0xFF000000)
