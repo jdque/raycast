@@ -19,8 +19,14 @@ def render_tiles(tilemap):
 	for y in range(0, tilemap.height):
 		for x in range(0, tilemap.width):
 			tile = tilemap.get_tile(x, y)
-			if tile["kind"] != 0:
-				renderer.fill((x * tilemap.size, y * tilemap.size, tilemap.size, tilemap.size), 0xFFFFFFFF)
+			z = tile["floor_z"] + tile["floor_height"]
+			if z == 0:
+				color = 0xFF000000
+			elif z > 0:
+				color = 0xFFFFFFFF
+			elif z < 0:
+				color = 0xFF808080
+			renderer.fill((x * tilemap.size, y * tilemap.size, tilemap.size, tilemap.size), color)
 
 def render_camera(camera):
 	renderer.fill((int(camera.pos[0] - 1), int(camera.pos[1] - 1), 2, 2), 0xFFF0000)
@@ -70,18 +76,20 @@ def run():
 	# texture_sprite = factory.from_surface(texture_surface)
 
 	palette = TilePalette()
-	palette.add(0, 0, 0, 8, 2)
-	palette.add(1, 1, 64, 8, 2)
-	palette.add(2, 1, -64, 8, 7)
-	palette.add(3, 1, 32, 8, 7)
+	palette.add(0, 0, 0, 0, 8, 2)
+	palette.add(1, 1, 64, 0, 8, 2)
+	palette.add(2, 1, 0, -64, 8, 7)
+	palette.add(3, 1, 32, 0, 8, 7)
+	palette.add(4, 1, 192, -64, 8, 2)
+	palette.add(5, 1, 64, -64, 8, 2)
 
 	tilemap = TileMap(7, 7, 64)
 	tilemap.set_tiles_from_palette(palette,
 	   [[1,1,1,1,1,1,1],
-		[1,0,0,1,0,0,1],
-		[1,0,0,3,3,0,1],
-		[1,0,0,2,2,0,1],
-		[1,0,0,2,2,0,1],
+		[1,0,3,4,4,0,1],
+		[1,3,5,2,2,5,1],
+		[1,0,5,2,2,5,1],
+		[1,0,0,5,5,0,1],
 		[1,0,0,0,0,0,1],
 		[1,1,1,1,1,1,1]])
 
@@ -117,8 +125,8 @@ def run():
 
 		#render
 		renderer.clear(0xFF000000)
-		render_grid(tilemap)
 		render_tiles(tilemap)
+		render_grid(tilemap)
 		render_camera(camera)
 		render_scan(camera, tilemap)
 		render_border(render_plane)

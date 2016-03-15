@@ -85,19 +85,20 @@ def update_raycast():
 		camera.tilt_by(5)
 
 palette = TilePalette()
-palette.add(0, 0, 0, 8, 2)
-palette.add(1, 1, 64, 8, 2)
-palette.add(2, 1, -64, 8, 7)
-palette.add(3, 1, 32, 8, 7)
-palette.add(4, 1, 128, 8, 2)
+palette.add(0, 0, 0, 0, 8, 2)
+palette.add(1, 1, 64, 0, 8, 2)
+palette.add(2, 1, 0, -64, 8, 7)
+palette.add(3, 1, 32, 0, 8, 7)
+palette.add(4, 1, 192, -64, 8, 2)
+palette.add(5, 1, 64, -64, 8, 2)
 
 tilemap = TileMap(7, 7, 64)
 tilemap.set_tiles_from_palette(palette,
    [[1,1,1,1,1,1,1],
 	[1,0,3,4,4,0,1],
-	[1,3,3,2,2,0,1],
-	[1,0,0,2,2,0,1],
-	[1,0,0,0,0,0,1],
+	[1,3,5,2,2,5,1],
+	[1,0,5,2,2,5,1],
+	[1,0,0,5,5,0,1],
 	[1,0,0,0,0,0,1],
 	[1,1,1,1,1,1,1]])
 

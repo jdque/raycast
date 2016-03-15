@@ -12,10 +12,11 @@ class TilePalette:
 	def __init__(self):
 		self.palette = {}
 
-	def add(self, index, kind, floor_height, floor_tex, wall_tex):
+	def add(self, index, kind, floor_height, floor_z, floor_tex, wall_tex):
 		self.palette[str(index)] = {
 			"kind": kind,
 			"floor_height": floor_height,
+			"floor_z": floor_z,
 			"floor_tex": floor_tex,
 			"wall_tex": wall_tex,
 			}
@@ -165,7 +166,7 @@ def dda(origin, dir, step, tilemap):
 			y += delt_y
 		yield hit, side
 
-def project_point(pt, height, camera):
+def project_point(pt, z, camera):
 	#x
 	vector = pt - camera.pos
 	if abs(1 - np.dot(vector, camera.near_dir) / (np.linalg.norm(vector) * camera.near)) < 1e-10:
@@ -182,7 +183,7 @@ def project_point(pt, height, camera):
 		x = x_sign * np.linalg.norm(camera.near_plane + scaled_rej)
 
 	#y
-	vector = np.array([proj_len, camera.z - height])
+	vector = np.array([proj_len, camera.z - z])
 	ndir = np.array([np.linalg.norm(camera.near_dir), 0])
 	nplane = np.array([0, np.linalg.norm(camera.near_plane)])
 	if abs(1 - np.dot(vector, ndir) / (np.linalg.norm(vector) * camera.near)) < 1e-10:
@@ -310,17 +311,18 @@ def get_clipped_tile_points(tilemap, camera):
 
 			tile_coords = [int(collision[X]) / 64, int(collision[Y]) / 64]
 			tile_height = tile["floor_height"]
+			tile_z = tile["floor_z"]
 
-			render_wall = True if tile_height > prev_z and prev_z is not None else False
-			render_floor = True if camera.z - tile_height > 0 and not occluded and tile_height < max_z else False
+			render_wall = True if tile_z + tile_height > prev_z and prev_z is not None else False
+			render_floor = True if camera.z - tile_z + tile_height > 0 and not occluded and tile_z + tile_height < max_z else False
 
-			if tile_height >= max_z:
+			if tile_z + tile_height >= max_z:
 				stop = True
 
-			offset_z = prev_z
-			prev_z = tile_height
-			if tile_height - camera.z >= 0:
+			if tile_z + tile_height - camera.z >= 0:
 				occluded = True
+
+			prev_z = tile_z + tile_height
 
 			if (int(collision[X]) + 1) % 64 <= 1.0 and (int(collision[Y]) + 1) % 64 <= 1.0:
 				continue
@@ -359,7 +361,7 @@ def get_clipped_tile_points(tilemap, camera):
 							left = np.array([x, tile_coords[Y] * 64 + 64])
 							right = np.array([x, tile_coords[Y] * 64])
 					clip_pts = clip_wall(left, right, camera)
-					wall_pts.append((clip_pts, [left, right], tile, 1, offset_z))
+					wall_pts.append((clip_pts, [left, right], tile, 1))
 
 	return floor_pts, wall_pts
 
@@ -396,7 +398,7 @@ def get_tri_quads(tile_pts, camera):
 
 				trans_pts = []
 				for pt in tri_quad:
-					trans_pt = project_point(pt,  tile["floor_height"], camera)
+					trans_pt = project_point(pt,  tile["floor_z"] + tile["floor_height"], camera)
 					trans_pts.append([trans_pt[X], trans_pt[Y], 0.0])
 				trans_pts = np.array(trans_pts)
 				normalize_projection_points(trans_pts, camera)
@@ -413,7 +415,6 @@ def get_tri_quads(tile_pts, camera):
 
 				final_quads.append((og_pts, trans_pts, trans_mid_pt, offsets, tile, surface_type))
 		elif surface_type == 1: #wall
-			offset_z = tile_pt[4]
 			#temp - append tri midpoints
 			clip_w = abs(tile_pt[0][1] - tile_pt[0][0])
 			tile_pt[0].append(tile_pt[0][0] + clip_w * 1/3.)
@@ -421,8 +422,8 @@ def get_tri_quads(tile_pts, camera):
 
 			trans_pts = [] #[ul, bl, ur, br]
 			for pt in tile_pt[0]:
-				bottom_pt = project_point(pt, min(offset_z, tile["floor_height"]), camera)
-				top_pt = project_point(pt, max(offset_z, tile["floor_height"]), camera)
+				bottom_pt = project_point(pt, tile["floor_z"], camera)
+				top_pt = project_point(pt, tile["floor_z"] + tile["floor_height"], camera)
 				trans_pts.append([top_pt[X], top_pt[Y], 0.0]) #top
 				trans_pts.append([bottom_pt[X], bottom_pt[Y], 0.0]) #bottom
 			trans_pts = np.array(trans_pts)
