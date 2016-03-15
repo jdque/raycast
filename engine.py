@@ -50,6 +50,7 @@ class TileMap:
 class Camera:
 	def __init__(self):
 		self.pos = np.array([0., 0.])
+		self.height = 0.5
 		self.set_fov(90, 0, 100, 100, 100)
 
 	def move_to(self, x, y):
@@ -162,25 +163,40 @@ def dda(origin, dir, step, tilemap):
 			y += delt_y
 		yield hit, side
 
-def project_point(pt, camera, y_sign=1):
+def project_point(pt, height, camera):
+	#x
 	vector = pt - camera.pos
-	proj = camera.near_dir * (np.dot(vector, camera.near_dir) / np.dot(camera.near_dir, camera.near_dir))
-	rej = vector - proj
-	proj_len = np.linalg.norm(proj)
-	rej_len = np.linalg.norm(rej)
-	scaled_rej_len = np.linalg.norm(camera.near_dir) / proj_len * rej_len
-	scaled_rej = rej / rej_len * scaled_rej_len
+	if abs(1 - np.dot(vector, camera.near_dir) / (np.linalg.norm(vector) * camera.near)) < 1e-10:
+		proj_len = np.linalg.norm(vector)
+		x = np.linalg.norm(camera.near_plane)
+	else:
+		proj = camera.near_dir * (np.dot(vector, camera.near_dir) / np.dot(camera.near_dir, camera.near_dir))
+		rej = vector - proj
+		proj_len = np.linalg.norm(proj)
+		rej_len = np.linalg.norm(rej)
+		scaled_rej_len = np.linalg.norm(camera.near_dir) / proj_len * rej_len
+		scaled_rej = rej / rej_len * scaled_rej_len
+		x_sign = np.sign(np.dot((camera.near_plane + scaled_rej), camera.near_plane))
+		x = x_sign * np.linalg.norm(camera.near_plane + scaled_rej)
 
-	if proj_len == 0 or rej_len == 0:
-		return None
-
-	x_sign = np.sign(np.dot((camera.near_plane + scaled_rej), camera.near_plane))
-	x = x_sign * np.linalg.norm(camera.near_plane + scaled_rej)
-	height = np.linalg.norm(camera.near_dir) / (proj_len)
-	y = y_sign * height
+	#y
+	vector = np.array([proj_len, camera.height * 64 - height * 64])
+	ndir = np.array([np.linalg.norm(camera.near_dir), 0])
+	nplane = np.array([0, np.linalg.norm(camera.near_plane)])
+	if abs(1 - np.dot(vector, ndir) / (np.linalg.norm(vector) * camera.near)) < 1e-10:
+		y = np.linalg.norm(nplane)
+	else:
+		proj = ndir * (np.dot(vector, ndir) / np.dot(ndir, ndir))
+		rej = vector - proj
+		proj_len = np.linalg.norm(proj)
+		rej_len = np.linalg.norm(rej)
+		scaled_rej_len = np.linalg.norm(ndir) / proj_len * rej_len
+		scaled_rej = rej / rej_len * scaled_rej_len
+		y_sign = np.sign(np.dot((nplane + scaled_rej), nplane))
+		y = y_sign * np.linalg.norm(nplane + scaled_rej)
 
 	return [x * (np.linalg.norm(camera.plane) / np.linalg.norm(camera.near_plane)),
-			y * (np.linalg.norm(camera.dir) / np.linalg.norm(camera.near_dir)) * 0.5]
+			y * (np.linalg.norm(camera.plane) / np.linalg.norm(camera.near_plane)) - camera.horizon_y]
 
 def normalize_projection_points(pts, camera):
 	pts[:,0:2] /= [camera.proj_width, camera.proj_height]
@@ -278,12 +294,12 @@ def get_clipped_tile_points(tilemap, camera):
 	floor_pts = []
 	wall_pts = []
 	used_tiles = set()
-	camera_height = 0.0
 	max_height = 1.0
 
 	for ray in camera.rays:
 		stop = False
-		cur_height = 0.0
+		prev_height = None
+		occluded = False
 		for collision, side in dda(camera.pos, ray, 64, tilemap):
 			tile = tilemap.get_tile_px(collision[X], collision[Y])
 
@@ -293,18 +309,16 @@ def get_clipped_tile_points(tilemap, camera):
 			tile_coords = [int(collision[X]) / 64, int(collision[Y]) / 64]
 			tile_height = tile["floor_height"]
 
-			render_floor = False
-			render_wall = False
-			if tile_height > cur_height:
-				render_wall = True
-			if abs(cur_height + tile_height - camera_height) < 0.5:
-				render_floor = True
+			render_wall = True if tile_height > prev_height and prev_height is not None else False
+			render_floor = True if camera.height - tile_height > 0 and not occluded and tile_height < max_height else False
 
 			if tile_height >= max_height:
 				stop = True
 
-			if tile_height > cur_height:
-				cur_height = tile_height
+			offset_height = prev_height
+			prev_height = tile_height
+			if tile_height - camera.height >= 0:
+				occluded = True
 
 			if (int(collision[X]) + 1) % 64 <= 1.0 and (int(collision[Y]) + 1) % 64 <= 1.0:
 				continue
@@ -343,8 +357,7 @@ def get_clipped_tile_points(tilemap, camera):
 							left = np.array([x, tile_coords[Y] * 64 + 64])
 							right = np.array([x, tile_coords[Y] * 64])
 					clip_pts = clip_wall(left, right, camera)
-					wall_pts.append((clip_pts, [left, right], tile, 1))
-
+					wall_pts.append((clip_pts, [left, right], tile, 1, offset_height))
 
 	return floor_pts, wall_pts
 
@@ -381,13 +394,8 @@ def get_tri_quads(tile_pts, camera):
 
 				trans_pts = []
 				for pt in tri_quad:
-					trans_pt = project_point(pt, camera, 1)
-					if trans_pt is not None:
-						trans_pt[Y] *= 64
-						off_height = 2 * trans_pt[Y] * tile["floor_height"]
-						trans_pts.append([trans_pt[X], trans_pt[Y] + camera.horizon_y - off_height, 0.0])
-				if len(trans_pts) != 4:
-					continue
+					trans_pt = project_point(pt,  tile["floor_height"], camera)
+					trans_pts.append([trans_pt[X], trans_pt[Y], 0.0])
 				trans_pts = np.array(trans_pts)
 				normalize_projection_points(trans_pts, camera)
 
@@ -403,6 +411,7 @@ def get_tri_quads(tile_pts, camera):
 
 				final_quads.append((og_pts, trans_pts, trans_mid_pt, offsets, tile, surface_type))
 		elif surface_type == 1: #wall
+			offset_height = tile_pt[4]
 			#temp - append tri midpoints
 			clip_w = abs(tile_pt[0][1] - tile_pt[0][0])
 			tile_pt[0].append(tile_pt[0][0] + clip_w * 1/3.)
@@ -410,14 +419,10 @@ def get_tri_quads(tile_pts, camera):
 
 			trans_pts = [] #[ul, bl, ur, br]
 			for pt in tile_pt[0]:
-				bottom_pt = project_point(pt, camera, 1)
-				if bottom_pt is not None:
-					bottom_pt[Y] *= 64
-					top_height = 2 * bottom_pt[Y] * tile["floor_height"]
-					trans_pts.append([bottom_pt[X], bottom_pt[Y] + camera.horizon_y - top_height, 0.0]) #top
-					trans_pts.append([bottom_pt[X], bottom_pt[Y] + camera.horizon_y, 0.0]) #bottom
-			if len(trans_pts) != 8:
-				continue
+				bottom_pt = project_point(pt, min(offset_height, tile["floor_height"]), camera)
+				top_pt = project_point(pt, max(offset_height, tile["floor_height"]), camera)
+				trans_pts.append([top_pt[X], top_pt[Y], 0.0]) #top
+				trans_pts.append([bottom_pt[X], bottom_pt[Y], 0.0]) #bottom
 			trans_pts = np.array(trans_pts)
 			normalize_projection_points(trans_pts, camera)
 

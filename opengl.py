@@ -76,22 +76,27 @@ def update_raycast():
 	elif key_states[sdl2.SDL_SCANCODE_RIGHT]:
 		camera.rotate_by(5)
 	if key_states[sdl2.SDL_SCANCODE_W]:
-		camera.tilt_by(-4)
+		camera.height += 0.05
 	elif key_states[sdl2.SDL_SCANCODE_S]:
-		camera.tilt_by(4)
+		camera.height -= 0.05
+	if key_states[sdl2.SDL_SCANCODE_A]:
+		camera.tilt_by(-5)
+	elif key_states[sdl2.SDL_SCANCODE_D]:
+		camera.tilt_by(5)
 
 palette = TilePalette()
 palette.add(0, 0, 0.0, 8, 2)
 palette.add(1, 1, 1.0, 8, 2)
-palette.add(2, 1, 0.25, 8, 7)
+palette.add(2, 1, -1.0, 8, 7)
 palette.add(3, 1, 0.5, 8, 7)
+palette.add(4, 1, 2.0, 8, 2)
 
 tilemap = TileMap(7, 7, 64)
 tilemap.set_tiles_from_palette(palette,
    [[1,1,1,1,1,1,1],
-	[1,0,0,1,1,0,1],
-	[1,0,0,2,3,0,1],
-	[1,0,0,0,0,0,1],
+	[1,0,3,4,4,0,1],
+	[1,3,3,2,2,0,1],
+	[1,0,0,2,2,0,1],
 	[1,0,0,0,0,0,1],
 	[1,0,0,0,0,0,1],
 	[1,1,1,1,1,1,1]])

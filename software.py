@@ -72,7 +72,7 @@ def run():
 	palette = TilePalette()
 	palette.add(0, 0, 0.0, 8, 2)
 	palette.add(1, 1, 1.0, 8, 2)
-	palette.add(2, 1, 0.25, 8, 7)
+	palette.add(2, 1, -1.0, 8, 7)
 	palette.add(3, 1, 0.5, 8, 7)
 
 	tilemap = TileMap(7, 7, 64)
@@ -81,7 +81,7 @@ def run():
 		[1,0,0,1,0,0,1],
 		[1,0,0,3,3,0,1],
 		[1,0,0,2,2,0,1],
-		[1,0,0,0,0,0,1],
+		[1,0,0,2,2,0,1],
 		[1,0,0,0,0,0,1],
 		[1,1,1,1,1,1,1]])
 
@@ -111,9 +111,9 @@ def run():
 		elif key_states[sdl2.SDL_SCANCODE_RIGHT]:
 			camera.rotate_by(5)
 		if key_states[sdl2.SDL_SCANCODE_W]:
-			camera.tilt_by(-4)
+			camera.height += 0.05
 		elif key_states[sdl2.SDL_SCANCODE_S]:
-			camera.tilt_by(4)
+			camera.height -= 0.05
 
 		#render
 		renderer.clear(0xFF000000)
