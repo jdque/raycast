@@ -30,12 +30,15 @@ ATTR_MODELVIEWMAT = -1
 ATTR_VERTPROJMAT = -1
 ATTR_TEXPROJMAT = -1
 
+VBO = None
+
 def render_raycast(camera, tilemap):
 	global test_tris
 
 	test_tris = []
 	floor_pts, wall_pts = get_clipped_tile_points(tilemap, camera)
 	quads = get_tri_quads(floor_pts + wall_pts, camera)
+
 	for quad in quads:
 		pos = quad[2]
 		o_tri = quad[0]
@@ -62,6 +65,14 @@ def render_raycast(camera, tilemap):
 			make_model_view_mat(pos[X], pos[Y], 0.0, 1.0, 1.0, 1.0),
 			offset,
 			tile_tex))
+
+	vertices = np.zeros(len(test_tris) * 9, dtype=np.float32)
+	for i in xrange(0, len(test_tris)):
+		vertices[9*i:9*i+9] = test_tris[i].vertices
+
+	GL.glBindBuffer(GL.GL_ARRAY_BUFFER, VBO)
+	GL.glBufferData(GL.GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL.GL_DYNAMIC_DRAW)
+	GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
 
 def update_raycast():
 	key_states = sdl2.keyboard.SDL_GetKeyboardState(None)
@@ -114,17 +125,8 @@ class TriQuad:
 		self.vert_proj_mat = make_proj_mat(original, transformed)
 		self.tex_proj_mat = make_proj_mat(transformed, texture_bounds)
 		original[:,2] = transformed[:,2]
-
 		self.vertices = original[0:3].ravel().astype(np.float32)
-		self.VBO = GL.glGenBuffers(1)
-		GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.VBO)
-		GL.glBufferData(GL.GL_ARRAY_BUFFER, self.vertices.nbytes, self.vertices, GL.GL_DYNAMIC_DRAW)
-		GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
-
 		self.texture_id = texture_id
-
-	def __del__(self):
-		GL.glDeleteBuffers(1, np.array([self.VBO]))
 
 def make_model_view_mat(x, y, z, sx, sy, sz):
 	model_view_mat = np.array([
@@ -180,6 +182,7 @@ def init():
 	global ATTR_MODELVIEWMAT
 	global ATTR_VERTPROJMAT
 	global ATTR_TEXPROJMAT
+	global VBO
 	global textures
 
 	#SDL
@@ -255,6 +258,8 @@ def init():
 	GL.glEnableVertexAttribArray(ATTR_POSITION)
 	GL.glBindVertexArray(0)
 
+	VBO = GL.glGenBuffers(1)
+
 	#Load textures
 	texture_surface = sdl2.ext.load_image("C:\\dev\\raycast\\textures.png")
 	sprite_factory = sdl2.ext.SpriteFactory(sprite_type=sdl2.ext.SOFTWARE, renderer=renderer)
@@ -301,17 +306,17 @@ def render():
 	GL.glActiveTexture(GL.GL_TEXTURE0)
 
 	GL.glBindVertexArray(VAO_VERTEX)
-	for tri in test_tris:
+	GL.glBindBuffer(GL.GL_ARRAY_BUFFER, VBO)
+	GL.glVertexAttribPointer(ATTR_POSITION, 3, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
+	for i in xrange(0, len(test_tris)):
+		tri = test_tris[i]
 		GL.glUniformMatrix4fv(ATTR_MODELVIEWMAT, 1, GL.GL_TRUE, tri.model_view_mat)
 		GL.glUniformMatrix4fv(ATTR_VERTPROJMAT, 1, GL.GL_TRUE, tri.vert_proj_mat)
 		GL.glUniformMatrix4fv(ATTR_TEXPROJMAT, 1, GL.GL_TRUE, tri.tex_proj_mat)
 		GL.glBindTexture(GL.GL_TEXTURE_2D, tri.texture_id)
-		GL.glBindBuffer(GL.GL_ARRAY_BUFFER, tri.VBO)
-		GL.glVertexAttribPointer(ATTR_POSITION, 3, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
-		GL.glDrawArrays(GL.GL_TRIANGLES, 0, len(tri.vertices))
-		GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+		GL.glDrawArrays(GL.GL_TRIANGLES, i * 3, 3)
 		GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
-
+	GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
 	GL.glBindVertexArray(0)
 
 	sdl2.SDL_GL_SwapWindow(window.window)
