@@ -52,8 +52,8 @@ def render_raycast(camera, tilemap):
 		elif surface_type == 1:
 			tile_tex = quad[4]["wall_tex"]
 
-		area = 0.5 * np.linalg.norm(np.cross(t_tri[1] - t_tri[0], t_tri[2] - t_tri[0]))
-		if abs(area) <= 0.00001:
+		area = np.linalg.det(t_tri[0:3])
+		if abs(area) <= 1e-10:
 			continue
 
 		test_tris.append(TriQuad(
@@ -113,6 +113,7 @@ class TriQuad:
 		self.model_view_mat = model_view_mat
 		self.vert_proj_mat = make_proj_mat(original, transformed)
 		self.tex_proj_mat = make_proj_mat(transformed, texture_bounds)
+		original[:,2] = transformed[:,2]
 
 		self.vertices = original[0:3].ravel().astype(np.float32)
 		self.VBO = GL.glGenBuffers(1)
@@ -213,8 +214,7 @@ def init():
 		void main()
 		{
 			vec4 projPos = v_vertProjMat * vec4(v_position, 1);
-			vec4 texCoords = v_texProjMat * (projPos / projPos.w);
-			f_texCoords = vec4(texCoords.x, texCoords.y, texCoords.z, texCoords.w);
+			f_texCoords = v_texProjMat * (projPos / projPos.w);
 			f_z = projPos.z;
 			gl_Position = v_modelViewMat * projPos;
 		}

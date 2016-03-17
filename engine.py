@@ -5,6 +5,7 @@ from geometry import *
 
 X = 0
 Y = 1
+Z = 2
 W = 2
 H = 3
 
@@ -198,8 +199,14 @@ def project_point(pt, z, camera):
 		y_sign = np.sign(np.dot((nplane + scaled_rej), nplane))
 		y = y_sign * np.linalg.norm(nplane + scaled_rej)
 
+	#z
+	vector = pt - camera.pos
+	proj = camera.near_dir * (np.dot(vector, camera.near_dir) / np.dot(camera.near_dir, camera.near_dir))
+	z = np.linalg.norm(proj) / (camera.far - camera.near)
+
 	return [x * (np.linalg.norm(camera.plane) / np.linalg.norm(camera.near_plane)),
-			y * (np.linalg.norm(camera.plane) / np.linalg.norm(camera.near_plane)) - camera.horizon_y]
+			y * (np.linalg.norm(camera.plane) / np.linalg.norm(camera.near_plane)) - camera.horizon_y,
+			z]
 
 def normalize_projection_points(pts, camera):
 	pts[:,0:2] /= [camera.proj_width, camera.proj_height]
@@ -386,25 +393,20 @@ def get_tri_quads(tile_pts, camera):
 				og_pts = []
 				d_mid = np.array([camera.proj_width / 2 - tri_quad[3][X], camera.proj_height / 2 - tri_quad[3][Y]])
 				for pt in tri_quad:
-					###
-					vector = pt - camera.pos
-					proj = camera.near_dir * (np.dot(vector, camera.near_dir) / np.dot(camera.near_dir, camera.near_dir))
-					z = np.linalg.norm(proj) / (camera.far - camera.near)
-					###
 					d = pt + d_mid
-					og_pts.append([d[X], d[Y], z])
+					og_pts.append([d[X], d[Y], 0.0])
 				og_pts = np.array(og_pts)
 				normalize_projection_points(og_pts, camera)
 
 				trans_pts = []
 				for pt in tri_quad:
 					trans_pt = project_point(pt,  tile["floor_z"] + tile["floor_height"], camera)
-					trans_pts.append([trans_pt[X], trans_pt[Y], 0.0])
+					trans_pts.append(trans_pt)
 				trans_pts = np.array(trans_pts)
 				normalize_projection_points(trans_pts, camera)
 
 				trans_mid_pt = np.average(trans_pts[0:3], axis=0)
-				trans_pts -= trans_mid_pt
+				trans_pts[:,0:2] -= trans_mid_pt[0:2]
 
 				offsets = np.array([
 					[(tri_quad[0][X] - tile_x) * recp_tile_w, (tri_quad[0][Y] - tile_y) * recp_tile_h],
@@ -422,10 +424,12 @@ def get_tri_quads(tile_pts, camera):
 
 			trans_pts = [] #[ul, bl, ur, br]
 			for pt in tile_pt[0]:
-				bottom_pt = project_point(pt, tile["floor_z"], camera)
+				#top
 				top_pt = project_point(pt, tile["floor_z"] + tile["floor_height"], camera)
-				trans_pts.append([top_pt[X], top_pt[Y], 0.0]) #top
-				trans_pts.append([bottom_pt[X], bottom_pt[Y], 0.0]) #bottom
+				trans_pts.append(top_pt)
+				#bottom
+				bottom_pt = project_point(pt, tile["floor_z"], camera)
+				trans_pts.append(bottom_pt)
 			trans_pts = np.array(trans_pts)
 			normalize_projection_points(trans_pts, camera)
 
@@ -443,23 +447,15 @@ def get_tri_quads(tile_pts, camera):
 			|    \|
 			-------
 			"""
-			###
-			vector = tile_pt[0][0] - camera.pos
-			proj = camera.dir * (np.dot(vector, camera.dir) / np.dot(camera.dir, camera.dir))
-			zl = np.linalg.norm(proj) / (camera.far - camera.near)
-			vector = tile_pt[0][1] - camera.pos
-			proj = camera.dir * (np.dot(vector, camera.dir) / np.dot(camera.dir, camera.dir))
-			zr =  np.linalg.norm(proj) / (camera.far - camera.near)
-			###
 			w = np.linalg.norm(tile_pt[0][1] - tile_pt[0][0])
 			o_l = camera.proj_width / 2. - w / 2.
 			o_r = camera.proj_width / 2. + w / 2.
 			o_t = camera.proj_height / 2. - 32
 			o_b = camera.proj_height / 2. + 32
-			o_ul = [o_l, o_t, zl]
-			o_ur = [o_r, o_t, zr]
-			o_br = [o_r, o_b, zr]
-			o_bl = [o_l, o_b, zl]
+			o_ul = [o_l, o_t, 0.0]
+			o_ur = [o_r, o_t, 0.0]
+			o_br = [o_r, o_b, 0.0]
+			o_bl = [o_l, o_b, 0.0]
 
 			l_third = abs(trans_pts[1] - trans_pts[0]) * 1/3.
 			r_third = abs(trans_pts[3] - trans_pts[2]) * 1/3.
@@ -481,7 +477,7 @@ def get_tri_quads(tile_pts, camera):
 				[proj_mid[X], proj_mid[Y], 0.0]
 				])
 			mid = np.average(tr_pts[0:3], axis=0)
-			tr_pts -= mid
+			tr_pts[:,0:2] -= mid[0:2]
 			offs = np.array([
 				[offset_l, 1.0],
 				[offset_r, 0.0],
@@ -507,7 +503,7 @@ def get_tri_quads(tile_pts, camera):
 				[proj_mid[X], proj_mid[Y], 0.0]
 				])
 			mid = np.average(tr_pts[0:3], axis=0)
-			tr_pts -= mid
+			tr_pts[:,0:2] -= mid[0:2]
 			offs = np.array([
 				[offset_l, 1.0],
 				[offset_r, 1.0],
