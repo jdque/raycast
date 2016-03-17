@@ -82,8 +82,6 @@ class Camera:
 			[np.cos(rad), -np.sin(rad)],
 			[np.sin(rad), np.cos(rad)]
 		])
-		self.dir = np.dot(rot, self.dir)
-		self.plane = np.dot(rot, self.plane)
 		self.near_dir = np.dot(rot, self.near_dir)
 		self.near_plane = np.dot(rot, self.near_plane)
 
@@ -91,7 +89,7 @@ class Camera:
 			self.rays[i] = np.dot(rot, self.rays[i])
 
 	def move_forward(self, distance):
-		step = self.dir / np.linalg.norm(self.dir) * distance
+		step = self.near_dir / self.near * distance
 		self.move_by(step[0], step[1], 0)
 
 	def tilt_by(self, distance):
@@ -103,69 +101,22 @@ class Camera:
 		self.far = float(far)
 		self.proj_width = float(proj_width)
 		self.proj_height = float(proj_height)
+		self.aspect = self.proj_width / self.proj_height
 		self.horizon_y = float(proj_height) / 2
 
-		self.dir = np.array([(self.proj_width / 2) / np.tan(np.deg2rad(self.angle / 2)), 0])
-		self.plane = np.array([0, self.proj_width / 2])
 		self.near_dir = np.array([self.near, 0])
 		self.near_plane = np.array([0, self.near * np.tan(np.deg2rad(self.angle / 2))])
 		self.rays = self.generate_rays()
 
 	def generate_rays(self):
 		rays = []
-		unit_plane = self.plane / math.sqrt(self.plane[0]**2 + self.plane[1]**2)
+		direc = np.array([(self.proj_width / 2) / np.tan(np.deg2rad(self.angle / 2)), 0])
+		unit_plane = np.array([0, 1])
 		for i in range(int(-self.proj_width / 2), int(self.proj_width / 2)):
-			plane_pt = self.dir + (unit_plane * i)
+			plane_pt = direc + (unit_plane * i)
 			unit_ray = plane_pt / math.sqrt(plane_pt[0]**2 + plane_pt[1]**2)
 			rays.append(unit_ray)
 		return np.array(rays)
-
-def dda(origin, dir, step, tilemap):
-	m = dir[1] / dir[0]
-
-	if dir[0] >= 0:
-		if dir[1] < 0: #1
-			dx = 1
-			dy = -1
-		else: #4
-			dx = 1
-			dy = 1
-	else:
-		if dir[1] < 0: #2
-			dx = -1
-			dy = -1
-		else: #3
-			dx = -1
-			dy = 1
-
-	delt_x = math.sqrt(step**2 + (m * step)**2)
-	delt_y = math.sqrt(step**2 + (1/m * step)**2)
-
-	if dx > 0:
-		side_x = abs(step - origin[0] % step) * delt_x / step + 1
-	else:
-		side_x = abs(origin[0] % step) * delt_x / step + 1
-
-	if dy > 0:
-		side_y = abs(step - origin[1] % step) * delt_y / step + 1
-	else:
-		side_y = abs(origin[1] % step) * delt_y / step + 1
-
-	x = side_x
-	y = side_y
-
-	yield origin, None
-
-	while True:
-		if x < y:
-			hit = origin + dir * abs(x)
-			side = 1
-			x += delt_x
-		else:
-			hit = origin + dir * abs(y)
-			side = 0
-			y += delt_y
-		yield hit, side
 
 def project_point(pt, z, camera):
 	#x
@@ -178,14 +129,14 @@ def project_point(pt, z, camera):
 		rej = vector - proj
 		proj_len = np.linalg.norm(proj)
 		rej_len = np.linalg.norm(rej)
-		scaled_rej_len = np.linalg.norm(camera.near_dir) / proj_len * rej_len
+		scaled_rej_len = camera.near / proj_len * rej_len
 		scaled_rej = rej / rej_len * scaled_rej_len
 		x_sign = np.sign(np.dot((camera.near_plane + scaled_rej), camera.near_plane))
 		x = x_sign * np.linalg.norm(camera.near_plane + scaled_rej)
 
 	#y
 	vector = np.array([proj_len, camera.z - z])
-	ndir = np.array([np.linalg.norm(camera.near_dir), 0])
+	ndir = np.array([camera.near, 0])
 	nplane = np.array([0, np.linalg.norm(camera.near_plane)])
 	if abs(1 - np.dot(vector, ndir) / (np.linalg.norm(vector) * camera.near)) < 1e-10:
 		y = np.linalg.norm(nplane)
@@ -204,8 +155,8 @@ def project_point(pt, z, camera):
 	proj = camera.near_dir * (np.dot(vector, camera.near_dir) / np.dot(camera.near_dir, camera.near_dir))
 	z = np.linalg.norm(proj) / (camera.far - camera.near)
 
-	return [x * (np.linalg.norm(camera.plane) / np.linalg.norm(camera.near_plane)),
-			y * (np.linalg.norm(camera.plane) / np.linalg.norm(camera.near_plane)) - camera.horizon_y,
+	return [x * (camera.proj_width / camera.near),
+			y * (camera.proj_height / camera.near) * camera.aspect - camera.horizon_y,
 			z]
 
 def normalize_projection_points(pts, camera):
@@ -234,7 +185,7 @@ def clip_floor(ul, ur, br, bl, camera):
 			final_pts.append(pt)
 		elif np.dot(cam_r_ray / np.linalg.norm(cam_r_ray), unit) > 0.9999:
 			final_pts.append(pt)
-		elif np.sign(np.cross(cam_l_ray, pt - camera.pos)) == np.sign(np.cross(pt - camera.pos, cam_r_ray)) and np.dot(pt - camera.pos, camera.dir) >= 0:
+		elif np.sign(np.cross(cam_l_ray, pt - camera.pos)) == np.sign(np.cross(pt - camera.pos, cam_r_ray)) and np.dot(pt - camera.pos, camera.near_dir) >= 0:
 			final_pts.append(pt)
 
 	#add points where tile edges intersect field of vision bounds
@@ -288,9 +239,9 @@ def clip_wall(left, right, camera):
 			final_pts.append(pt)
 
 	#add wall endpoints if they're within field of vision bounds
-	if np.sign(np.cross(cam_l_ray, left - camera.pos)) == np.sign(np.cross(left - camera.pos, cam_r_ray)) and np.dot(left - camera.pos, camera.dir) >= 0:
+	if np.sign(np.cross(cam_l_ray, left - camera.pos)) == np.sign(np.cross(left - camera.pos, cam_r_ray)) and np.dot(left - camera.pos, camera.near_dir) >= 0:
 		final_pts.append(left)
-	if np.sign(np.cross(cam_l_ray, right - camera.pos)) == np.sign(np.cross(right - camera.pos, cam_r_ray)) and np.dot(right - camera.pos, camera.dir) >= 0:
+	if np.sign(np.cross(cam_l_ray, right - camera.pos)) == np.sign(np.cross(right - camera.pos, cam_r_ray)) and np.dot(right - camera.pos, camera.near_dir) >= 0:
 		final_pts.append(right)
 
 	#final wall bounds will be the left-most and right-most points
@@ -310,7 +261,7 @@ def get_clipped_tile_points(tilemap, camera):
 		stop = False
 		prev_z = None
 		occluded = False
-		for collision, side in dda(camera.pos, ray, 64, tilemap):
+		for collision, side in dda(camera.pos, ray, 64):
 			tile = tilemap.get_tile_px(collision[X], collision[Y])
 
 			if tile is None or stop:

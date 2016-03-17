@@ -30,18 +30,14 @@ def render_tiles(tilemap):
 
 def render_camera(camera):
 	renderer.fill((int(camera.pos[0] - 1), int(camera.pos[1] - 1), 2, 2), 0xFFF0000)
-	renderer.draw_line((int(camera.pos[0]), int(camera.pos[1]), int(camera.pos[0] + camera.dir[0]), int(camera.pos[1] + camera.dir[1])), 0xFFF0000)
+	renderer.draw_line((int(camera.pos[0]), int(camera.pos[1]), int(camera.pos[0] + camera.near_dir[0]), int(camera.pos[1] + camera.near_dir[1])), 0xFFF0000)
 
-	plane_p0 = camera.pos + camera.dir - camera.plane
-	plane_p1 = camera.pos + camera.dir + camera.plane
+	plane_p0 = camera.pos + camera.near_dir - camera.near_plane
+	plane_p1 = camera.pos + camera.near_dir + camera.near_plane
 
 	renderer.draw_line((int(plane_p0[0]), int(plane_p0[1]), int(plane_p1[0]), int(plane_p1[1])), 0xFFF0000)
 	renderer.draw_line((int(camera.pos[0]), int(camera.pos[1]), int(plane_p0[0]), int(plane_p0[1])), 0xFFF0000)
 	renderer.draw_line((int(camera.pos[0]), int(camera.pos[1]), int(plane_p1[0]), int(plane_p1[1])), 0xFFF0000)
-
-	near_p0 = camera.pos + camera.near_dir - camera.near_plane
-	near_p1 = camera.pos + camera.near_dir + camera.near_plane
-	renderer.draw_line((int(near_p0[0]), int(near_p0[1]), int(near_p1[0]), int(near_p1[1])), 0xFFF0000)
 
 def render_border(plane):
 	renderer.draw_line((int(plane[X]), int(plane[Y]), int(plane[X] + plane[W]), int(plane[Y])), 0xFFF0000)

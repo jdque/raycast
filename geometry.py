@@ -80,3 +80,50 @@ def triangulate(pts):
 	for i in range(1, len(pts) - 1):
 		tris.append([pts[0], pts[i], pts[i+1]])
 	return tris
+
+def dda(origin, dir, step):
+	m = dir[1] / dir[0]
+
+	if dir[0] >= 0:
+		if dir[1] < 0: #1
+			dx = 1
+			dy = -1
+		else: #4
+			dx = 1
+			dy = 1
+	else:
+		if dir[1] < 0: #2
+			dx = -1
+			dy = -1
+		else: #3
+			dx = -1
+			dy = 1
+
+	delt_x = np.sqrt(step**2 + (m * step)**2)
+	delt_y = np.sqrt(step**2 + (1/m * step)**2)
+
+	if dx > 0:
+		side_x = abs(step - origin[0] % step) * delt_x / step + 1
+	else:
+		side_x = abs(origin[0] % step) * delt_x / step + 1
+
+	if dy > 0:
+		side_y = abs(step - origin[1] % step) * delt_y / step + 1
+	else:
+		side_y = abs(origin[1] % step) * delt_y / step + 1
+
+	x = side_x
+	y = side_y
+
+	yield origin, None
+
+	while True:
+		if x < y:
+			hit = origin + dir * abs(x)
+			side = 1
+			x += delt_x
+		else:
+			hit = origin + dir * abs(y)
+			side = 0
+			y += delt_y
+		yield hit, side
