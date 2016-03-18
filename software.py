@@ -19,7 +19,7 @@ def render_tiles(tilemap):
 	for y in range(0, tilemap.height):
 		for x in range(0, tilemap.width):
 			tile = tilemap.get_tile(x, y)
-			z = tile["floor_z"] + tile["floor_height"]
+			z = tile.floor_z + tile.floor_height
 			if z == 0:
 				color = 0xFF000000
 			elif z > 0:
@@ -72,12 +72,12 @@ def run():
 	# texture_sprite = factory.from_surface(texture_surface)
 
 	palette = TilePalette()
-	palette.add(0, 0, 0, 0, 8, 2)
-	palette.add(1, 1, 64, 0, 8, 2)
-	palette.add(2, 1, 0, -64, 8, 7)
-	palette.add(3, 1, 32, 0, 8, 7)
-	palette.add(4, 1, 192, -64, 8, 2)
-	palette.add(5, 1, 64, -64, 8, 2)
+	palette.add(0, Tile(0, 0, 0, 8, 2))
+	palette.add(1, Tile(1, 64, 0, 8, 2))
+	palette.add(2, Tile(1, 0, -64, 8, 7))
+	palette.add(3, Tile(1, 32, 0, 8, 7))
+	palette.add(4, Tile(1, 192, -64, 8, 2))
+	palette.add(5, Tile(1, 64, -64, 8, 2))
 
 	tilemap = TileMap(7, 7, 64)
 	tilemap.set_tiles_from_palette(palette,

@@ -1,3 +1,4 @@
+from collections import namedtuple
 import math
 import numpy as np
 
@@ -13,17 +14,13 @@ class TilePalette:
 	def __init__(self):
 		self.palette = {}
 
-	def add(self, index, kind, floor_height, floor_z, floor_tex, wall_tex):
-		self.palette[str(index)] = {
-			"kind": kind,
-			"floor_height": floor_height,
-			"floor_z": floor_z,
-			"floor_tex": floor_tex,
-			"wall_tex": wall_tex,
-			}
+	def add(self, index, tile):
+		self.palette[str(index)] = tile
 
 	def get(self, index):
 		return self.palette[str(index)]
+
+Tile = namedtuple('Tile', ['kind', 'floor_height', 'floor_z', 'floor_tex', 'wall_tex'])
 
 class TileMap:
 	def __init__(self, width, height, size):
@@ -268,8 +265,8 @@ def get_clipped_tile_points(tilemap, camera):
 				break
 
 			tile_coords = [int(collision[X]) / 64, int(collision[Y]) / 64]
-			tile_height = tile["floor_height"]
-			tile_z = tile["floor_z"]
+			tile_height = tile.floor_height
+			tile_z = tile.floor_z
 
 			render_wall = True if tile_z + tile_height > prev_z and prev_z is not None else False
 			render_floor = True if camera.z - tile_z + tile_height > 0 and not occluded and tile_z + tile_height < max_z else False
@@ -351,7 +348,7 @@ def get_tri_quads(tile_pts, camera):
 
 				trans_pts = []
 				for pt in tri_quad:
-					trans_pt = project_point(pt,  tile["floor_z"] + tile["floor_height"], camera)
+					trans_pt = project_point(pt,  tile.floor_z + tile.floor_height, camera)
 					trans_pts.append(trans_pt)
 				trans_pts = np.array(trans_pts)
 				normalize_projection_points(trans_pts, camera)
@@ -376,10 +373,10 @@ def get_tri_quads(tile_pts, camera):
 			trans_pts = [] #[ul, bl, ur, br]
 			for pt in tile_pt[0]:
 				#top
-				top_pt = project_point(pt, tile["floor_z"] + tile["floor_height"], camera)
+				top_pt = project_point(pt, tile.floor_z + tile.floor_height, camera)
 				trans_pts.append(top_pt)
 				#bottom
-				bottom_pt = project_point(pt, tile["floor_z"], camera)
+				bottom_pt = project_point(pt, tile.floor_z, camera)
 				trans_pts.append(bottom_pt)
 			trans_pts = np.array(trans_pts)
 			normalize_projection_points(trans_pts, camera)

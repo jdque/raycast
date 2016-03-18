@@ -51,9 +51,9 @@ def render_raycast(camera, tilemap):
 
 		surface_type = quad[5]
 		if surface_type == 0:
-			tile_tex = quad[4]["floor_tex"]
+			tile_tex = quad[4].floor_tex
 		elif surface_type == 1:
-			tile_tex = quad[4]["wall_tex"]
+			tile_tex = quad[4].wall_tex
 
 		area = np.linalg.det(t_tri[0:3])
 		if abs(area) <= 1e-10:
@@ -96,12 +96,12 @@ def update_raycast():
 		camera.tilt_by(5)
 
 palette = TilePalette()
-palette.add(0, 0, 0, 0, 8, 2)
-palette.add(1, 1, 64, 0, 8, 2)
-palette.add(2, 1, 0, -64, 8, 7)
-palette.add(3, 1, 32, 0, 8, 7)
-palette.add(4, 1, 192, -64, 8, 2)
-palette.add(5, 1, 64, -64, 8, 2)
+palette.add(0, Tile(0, 0, 0, 8, 2))
+palette.add(1, Tile(1, 64, 0, 8, 2))
+palette.add(2, Tile(1, 0, -64, 8, 7))
+palette.add(3, Tile(1, 32, 0, 8, 7))
+palette.add(4, Tile(1, 192, -64, 8, 2))
+palette.add(5, Tile(1, 64, -64, 8, 2))
 
 tilemap = TileMap(7, 7, 64)
 tilemap.set_tiles_from_palette(palette,
