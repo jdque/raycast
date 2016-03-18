@@ -40,8 +40,8 @@ class TileMap:
 		return self.tiles[y][x]
 
 	def get_tile_px(self, x, y):
-		tx = int(x / self.size)
-		ty = int(y / self.size)
+		tx = x / self.size
+		ty = y / self.size
 		if tx < 0 or tx >= self.width or ty < 0 or ty >= self.height:
 			return None
 		return self.tiles[ty,tx]
@@ -161,7 +161,11 @@ def normalize_projection_points(pts, camera):
 	pts[:,0:2] -= 0.5
 	pts[:,0:2] *= 2
 
-def clip_floor(ul, ur, br, bl, camera):
+def clip_floor(corners, camera):
+	ul = corners[0]
+	ur = corners[1]
+	br = corners[2]
+	bl = corners[3]
 	edges = [
 		[ul, bl],
 		[ur, br],
@@ -171,46 +175,40 @@ def clip_floor(ul, ur, br, bl, camera):
 	cam_l_ray = camera.rays[0]
 	cam_r_ray = camera.rays[-1]
 
+	near_clip_l = camera.pos + camera.near_dir - camera.near_plane
+	near_clip_r = camera.pos + camera.near_dir + camera.near_plane
+
 	final_pts = []
 
 	#filter points that are outside the view frustrum
-	for pt in [ul, ur, bl, br]:
-		if not point_in_rect(pt, ul, br) or point_in_triangle(pt, camera.pos + (camera.near_dir * 0.99) - (camera.near_plane * 1.01), camera.pos + (camera.near_dir * 0.99) + (camera.near_plane * 0.99), camera.pos):
+	for pt in corners:
+		if point_in_triangle(pt, near_clip_l, near_clip_r, camera.pos):
 			continue
-		unit = (pt - camera.pos) / np.linalg.norm(pt - camera.pos)
-		if np.dot(cam_l_ray / np.linalg.norm(cam_l_ray), unit) > 0.9999:
+		vector = pt - camera.pos
+		unit = vector / np.linalg.norm(vector)
+		if np.dot(cam_l_ray, unit) > 0.9999:
 			final_pts.append(pt)
-		elif np.dot(cam_r_ray / np.linalg.norm(cam_r_ray), unit) > 0.9999:
+		elif np.dot(cam_r_ray, unit) > 0.9999:
 			final_pts.append(pt)
-		elif np.sign(np.cross(cam_l_ray, pt - camera.pos)) == np.sign(np.cross(pt - camera.pos, cam_r_ray)) and np.dot(pt - camera.pos, camera.near_dir) >= 0:
+		elif np.sign(np.cross(cam_l_ray, vector)) == np.sign(np.cross(vector, cam_r_ray)) and np.dot(vector, camera.near_dir) >= 0:
 			final_pts.append(pt)
 
-	#add points where tile edges intersect field of vision bounds
-	clip_rays = [
-		[camera.pos + camera.near_dir - camera.near_plane, cam_l_ray / np.linalg.norm(cam_l_ray)],
-		[camera.pos + camera.near_dir + camera.near_plane, cam_r_ray / np.linalg.norm(cam_r_ray)]
-		]
-	for clip_ray in clip_rays:
+	#tile is partially in view frustrum, find intersection points with camera bounds
+	if len(final_pts) < 4:
 		for edge in edges:
-			pt = intersect_ray_segment(clip_ray[0], clip_ray[1], edge[0], edge[1])
-			if pt is not None:
+			pt = intersect_ray_segment(near_clip_l, cam_l_ray, edge[0], edge[1])
+			if pt is not None and point_in_rect(pt, ul, br):
 				final_pts.append(pt)
-
-	#add points where tile edges intersect near clip segment
-	clip_segs = [
-		[camera.pos + camera.near_dir - camera.near_plane, camera.pos + camera.near_dir + camera.near_plane]
-		]
-	for clip_seg in clip_segs:
-		for edge in edges:
-			pt = intersect_segments(edge[0], edge[1], clip_seg[0], clip_seg[1])
+			pt = intersect_ray_segment(near_clip_r, cam_r_ray, edge[0], edge[1])
+			if pt is not None and point_in_rect(pt, ul, br):
+				final_pts.append(pt)
+			pt = intersect_segments(edge[0], edge[1],near_clip_l, near_clip_r)
 			if pt is not None and point_in_rect(pt, ul, br):
 				final_pts.append(pt)
 
-	#add left and right endpoints of near clip segment if they are inside the tile
-	near_clip_l = camera.pos + camera.near_dir - camera.near_plane
+	#add endpoints of near clip plane if inside the tile
 	if point_in_rect(near_clip_l, ul, br):
 		final_pts.append(near_clip_l)
-	near_clip_r = camera.pos + camera.near_dir + camera.near_plane
 	if point_in_rect(near_clip_r, ul, br):
 		final_pts.append(near_clip_r)
 
@@ -219,26 +217,28 @@ def clip_floor(ul, ur, br, bl, camera):
 
 	return final_pts
 
-def clip_wall(left, right, camera):
+def clip_wall(edges, camera):
+	left = edges[0]
+	right = edges[1]
 	cam_l_ray = camera.rays[0]
 	cam_r_ray = camera.rays[-1]
 
 	final_pts = []
 
 	#add points where wall intersects field of vision bounds
-	clip_rays = [
-		[camera.pos, cam_l_ray / np.linalg.norm(cam_l_ray)],
-		[camera.pos, cam_r_ray / np.linalg.norm(cam_r_ray)]
-		]
-	for clip_ray in clip_rays:
-		pt = intersect_ray_segment(clip_ray[0], clip_ray[1], left, right)
-		if pt is not None:
-			final_pts.append(pt)
+	pt = intersect_ray_segment(camera.pos, cam_l_ray, left, right)
+	if pt is not None:
+		final_pts.append(pt)
+	pt = intersect_ray_segment(camera.pos, cam_r_ray, left, right)
+	if pt is not None:
+		final_pts.append(pt)
 
 	#add wall endpoints if they're within field of vision bounds
-	if np.sign(np.cross(cam_l_ray, left - camera.pos)) == np.sign(np.cross(left - camera.pos, cam_r_ray)) and np.dot(left - camera.pos, camera.near_dir) >= 0:
+	l_vector = left - camera.pos
+	if np.sign(np.cross(cam_l_ray, l_vector)) == np.sign(np.cross(l_vector, cam_r_ray)) and np.dot(l_vector, camera.near_dir) >= 0:
 		final_pts.append(left)
-	if np.sign(np.cross(cam_l_ray, right - camera.pos)) == np.sign(np.cross(right - camera.pos, cam_r_ray)) and np.dot(right - camera.pos, camera.near_dir) >= 0:
+	r_vector = right - camera.pos
+	if np.sign(np.cross(cam_l_ray, r_vector)) == np.sign(np.cross(r_vector, cam_r_ray)) and np.dot(r_vector, camera.near_dir) >= 0:
 		final_pts.append(right)
 
 	#final wall bounds will be the left-most and right-most points
@@ -259,27 +259,27 @@ def get_clipped_tile_points(tilemap, camera):
 		prev_z = None
 		occluded = False
 		for collision, side in dda(camera.pos, ray, 64):
-			tile = tilemap.get_tile_px(collision[X], collision[Y])
+			collision_int = [int(collision[X]), int(collision[Y])]
+			tile = tilemap.get_tile_px(collision_int[X], collision_int[Y])
 
 			if tile is None or stop:
 				break
 
-			tile_coords = [int(collision[X]) / 64, int(collision[Y]) / 64]
-			tile_height = tile.floor_height
-			tile_z = tile.floor_z
+			tile_coords = [collision_int[X] / 64, collision_int[Y] / 64]
+			wall_z = tile.floor_z + tile.floor_height
 
-			render_wall = True if tile_z + tile_height > prev_z and prev_z is not None else False
-			render_floor = True if camera.z - tile_z + tile_height > 0 and not occluded and tile_z + tile_height < max_z else False
+			render_wall = True if wall_z > prev_z and prev_z is not None else False
+			render_floor = True if camera.z - wall_z > 0 and not occluded and wall_z < max_z else False
 
-			if tile_z + tile_height >= max_z:
+			if wall_z >= max_z:
 				stop = True
 
-			if tile_z + tile_height - camera.z >= 0:
+			if wall_z - camera.z >= 0:
 				occluded = True
 
-			prev_z = tile_z + tile_height
+			prev_z = wall_z
 
-			if (int(collision[X]) + 1) % 64 <= 1.0 and (int(collision[Y]) + 1) % 64 <= 1.0:
+			if (collision_int[X] + 1) % 64 <= 1.0 and (collision_int[Y] + 1) % 64 <= 1.0:
 				continue
 
 			#floor
@@ -287,12 +287,15 @@ def get_clipped_tile_points(tilemap, camera):
 				key = (tile_coords[X], tile_coords[Y])
 				if key not in used_tiles:
 					used_tiles.add(key)
-					ul = np.array([tile_coords[X] * 64., tile_coords[Y] * 64.])
-					ur = np.array([tile_coords[X] * 64. + 64, tile_coords[Y] * 64.])
-					br = np.array([tile_coords[X] * 64. + 64, tile_coords[Y] * 64. + 64])
-					bl = np.array([tile_coords[X] * 64., tile_coords[Y] * 64. + 64])
-					clip_pts = clip_floor(ul, ur, br, bl, camera)
-					floor_pts.append((clip_pts, [ul, br], tile, 0))
+					#[ul, ur, br, bl]
+					corners = np.array([
+						[tile_coords[X] * 64., tile_coords[Y] * 64.],
+						[tile_coords[X] * 64. + 64, tile_coords[Y] * 64.],
+						[tile_coords[X] * 64. + 64, tile_coords[Y] * 64. + 64],
+						[tile_coords[X] * 64., tile_coords[Y] * 64. + 64]
+						])
+					clip_pts = clip_floor(corners, camera)
+					floor_pts.append((clip_pts, [corners[0], corners[2]], tile, 0))
 
 			#wall
 			if render_wall:
@@ -300,23 +303,19 @@ def get_clipped_tile_points(tilemap, camera):
 				if key not in used_tiles and render_wall:
 					used_tiles.add(key)
 					if side == 0:
-						y = int(collision[Y] + 32 - (collision[Y] + 32) % 64)
-						if int(collision[Y]) % 64 <= 1.0:
-							left = np.array([tile_coords[X] * 64. + 64, y])
-							right = np.array([tile_coords[X] * 64., y])
+						y = (collision_int[Y] + 32 - (collision_int[Y] + 32) % 64)
+						if collision_int[Y] % 64 <= 1.0:
+							edges = np.array([[tile_coords[X] * 64. + 64, y],[tile_coords[X] * 64., y]])
 						else:
-							left = np.array([tile_coords[X] * 64., y])
-							right = np.array([tile_coords[X] * 64. + 64, y])
+							edges = np.array([[tile_coords[X] * 64., y], [tile_coords[X] * 64. + 64, y]])
 					else:
-						x = int(collision[X] + 32 - (collision[X] + 32) % 64)
-						if int(collision[X]) % 64 <= 1.0:
-							left = np.array([x, tile_coords[Y] * 64.])
-							right = np.array([x, tile_coords[Y] * 64. + 64])
+						x = (collision_int[X] + 32 - (collision_int[X] + 32) % 64)
+						if collision_int[X] % 64 <= 1.0:
+							edges = np.array([[x, tile_coords[Y] * 64.], [x, tile_coords[Y] * 64. + 64]])
 						else:
-							left = np.array([x, tile_coords[Y] * 64. + 64])
-							right = np.array([x, tile_coords[Y] * 64.])
-					clip_pts = clip_wall(left, right, camera)
-					wall_pts.append((clip_pts, [left, right], tile, 1))
+							edges = np.array([[x, tile_coords[Y] * 64. + 64], [x, tile_coords[Y] * 64.]])
+					clip_pts = clip_wall(edges, camera)
+					wall_pts.append((clip_pts, [edges[0], edges[1]], tile, 1))
 
 	return floor_pts, wall_pts
 
