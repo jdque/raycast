@@ -47,7 +47,7 @@ class TileMap:
 		ty = int(y / self.size)
 		if tx < 0 or tx >= self.width or ty < 0 or ty >= self.height:
 			return None
-		return self.tiles[ty][tx]
+		return self.tiles[ty,tx]
 
 class Camera:
 	def __init__(self):
@@ -290,10 +290,10 @@ def get_clipped_tile_points(tilemap, camera):
 				key = (tile_coords[X], tile_coords[Y])
 				if key not in used_tiles:
 					used_tiles.add(key)
-					ul = np.array([tile_coords[X] * 64, tile_coords[Y] * 64])
-					ur = np.array([tile_coords[X] * 64 + 64, tile_coords[Y] * 64])
-					br = np.array([tile_coords[X] * 64 + 64, tile_coords[Y] * 64 + 64])
-					bl = np.array([tile_coords[X] * 64, tile_coords[Y] * 64 + 64])
+					ul = np.array([tile_coords[X] * 64., tile_coords[Y] * 64.])
+					ur = np.array([tile_coords[X] * 64. + 64, tile_coords[Y] * 64.])
+					br = np.array([tile_coords[X] * 64. + 64, tile_coords[Y] * 64. + 64])
+					bl = np.array([tile_coords[X] * 64., tile_coords[Y] * 64. + 64])
 					clip_pts = clip_floor(ul, ur, br, bl, camera)
 					floor_pts.append((clip_pts, [ul, br], tile, 0))
 
@@ -305,19 +305,19 @@ def get_clipped_tile_points(tilemap, camera):
 					if side == 0:
 						y = int(collision[Y] + 32 - (collision[Y] + 32) % 64)
 						if int(collision[Y]) % 64 <= 1.0:
-							left = np.array([tile_coords[X] * 64 + 64, y])
-							right = np.array([tile_coords[X] * 64, y])
+							left = np.array([tile_coords[X] * 64. + 64, y])
+							right = np.array([tile_coords[X] * 64., y])
 						else:
-							left = np.array([tile_coords[X] * 64, y])
-							right = np.array([tile_coords[X] * 64 + 64, y])
+							left = np.array([tile_coords[X] * 64., y])
+							right = np.array([tile_coords[X] * 64. + 64, y])
 					else:
 						x = int(collision[X] + 32 - (collision[X] + 32) % 64)
 						if int(collision[X]) % 64 <= 1.0:
-							left = np.array([x, tile_coords[Y] * 64])
-							right = np.array([x, tile_coords[Y] * 64 + 64])
+							left = np.array([x, tile_coords[Y] * 64.])
+							right = np.array([x, tile_coords[Y] * 64. + 64])
 						else:
-							left = np.array([x, tile_coords[Y] * 64 + 64])
-							right = np.array([x, tile_coords[Y] * 64])
+							left = np.array([x, tile_coords[Y] * 64. + 64])
+							right = np.array([x, tile_coords[Y] * 64.])
 					clip_pts = clip_wall(left, right, camera)
 					wall_pts.append((clip_pts, [left, right], tile, 1))
 
