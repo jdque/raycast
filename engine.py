@@ -11,6 +11,8 @@ Z = 2
 W = 2
 H = 3
 
+Tile = namedtuple('Tile', ['kind', 'floor_height', 'floor_z', 'floor_tex', 'wall_tex'])
+
 class TilePalette:
 	def __init__(self):
 		self.palette = {}
@@ -21,7 +23,6 @@ class TilePalette:
 	def get(self, index):
 		return self.palette[str(index)]
 
-Tile = namedtuple('Tile', ['kind', 'floor_height', 'floor_z', 'floor_tex', 'wall_tex'])
 
 class TileMap:
 	def __init__(self, width, height, size):
@@ -253,20 +254,21 @@ def get_clipped_tile_points(tilemap, camera):
 	floor_pts = []
 	wall_pts = []
 	used_tiles = set()
+	tile_size = float(tilemap.size)
 	max_z = 64
 
 	for ray in camera.rays:
 		stop = False
 		prev_z = None
 		occluded = False
-		for collision, side in dda(camera.pos, ray, 64):
+		for collision, side in dda(camera.pos, ray, tile_size):
 			collision_int = [int(collision[X]), int(collision[Y])]
 			tile = tilemap.get_tile_px(collision_int[X], collision_int[Y])
 
 			if tile is None or stop:
 				break
 
-			tile_coords = [collision_int[X] / 64, collision_int[Y] / 64]
+			tile_coords = [int(collision_int[X] / tile_size), int(collision_int[Y] / tile_size)]
 			wall_z = tile.floor_z + tile.floor_height
 
 			render_wall = True if wall_z > prev_z and prev_z is not None else False
@@ -280,7 +282,7 @@ def get_clipped_tile_points(tilemap, camera):
 
 			prev_z = wall_z
 
-			if (collision_int[X] + 1) % 64 <= 1.0 and (collision_int[Y] + 1) % 64 <= 1.0:
+			if (collision_int[X] + 1) % tile_size <= 1.0 and (collision_int[Y] + 1) % tile_size <= 1.0:
 				continue
 
 			#floor
@@ -290,10 +292,10 @@ def get_clipped_tile_points(tilemap, camera):
 					used_tiles.add(key)
 					#[ul, ur, br, bl]
 					corners = np.array([
-						[tile_coords[X] * 64., tile_coords[Y] * 64.],
-						[tile_coords[X] * 64. + 64, tile_coords[Y] * 64.],
-						[tile_coords[X] * 64. + 64, tile_coords[Y] * 64. + 64],
-						[tile_coords[X] * 64., tile_coords[Y] * 64. + 64]
+						[tile_coords[X] * tile_size, tile_coords[Y] * tile_size],
+						[tile_coords[X] * tile_size + tile_size, tile_coords[Y] * tile_size],
+						[tile_coords[X] * tile_size + tile_size, tile_coords[Y] * tile_size + tile_size],
+						[tile_coords[X] * tile_size, tile_coords[Y] * tile_size + tile_size]
 						])
 					clip_pts = clip_floor(corners, camera)
 					floor_pts.append((clip_pts, [corners[0], corners[2]], tile, 0))
@@ -304,17 +306,17 @@ def get_clipped_tile_points(tilemap, camera):
 				if key not in used_tiles and render_wall:
 					used_tiles.add(key)
 					if side == 0:
-						y = (collision_int[Y] + 32 - (collision_int[Y] + 32) % 64)
-						if collision_int[Y] % 64 <= 1.0:
-							edges = np.array([[tile_coords[X] * 64. + 64, y],[tile_coords[X] * 64., y]])
+						y = (collision_int[Y] + tile_size / 2 - (collision_int[Y] + tile_size / 2) % tile_size)
+						if collision_int[Y] % tile_size <= 1.0:
+							edges = np.array([[tile_coords[X] * tile_size + tile_size, y],[tile_coords[X] * tile_size, y]])
 						else:
-							edges = np.array([[tile_coords[X] * 64., y], [tile_coords[X] * 64. + 64, y]])
+							edges = np.array([[tile_coords[X] * tile_size, y], [tile_coords[X] * tile_size + tile_size, y]])
 					else:
-						x = (collision_int[X] + 32 - (collision_int[X] + 32) % 64)
-						if collision_int[X] % 64 <= 1.0:
-							edges = np.array([[x, tile_coords[Y] * 64.], [x, tile_coords[Y] * 64. + 64]])
+						x = (collision_int[X] + tile_size / 2 - (collision_int[X] + tile_size / 2) % tile_size)
+						if collision_int[X] % tile_size <= 1.0:
+							edges = np.array([[x, tile_coords[Y] * tile_size], [x, tile_coords[Y] * tile_size + tile_size]])
 						else:
-							edges = np.array([[x, tile_coords[Y] * 64. + 64], [x, tile_coords[Y] * 64.]])
+							edges = np.array([[x, tile_coords[Y] * tile_size + tile_size], [x, tile_coords[Y] * tile_size]])
 					clip_pts = clip_wall(edges, camera)
 					wall_pts.append((clip_pts, [edges[0], edges[1]], tile, 1))
 
