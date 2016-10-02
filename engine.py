@@ -213,9 +213,6 @@ def clip_floor(corners, camera):
 	if point_in_rect(near_clip_r, ul, br):
 		final_pts.append(near_clip_r)
 
-	if len(final_pts) == 0:
-		return None
-
 	#sort points
 	final_pts = sort_cw(final_pts)
 
@@ -244,9 +241,6 @@ def clip_wall(edges, camera):
 	r_vector = right - camera.pos
 	if np.sign(np.cross(cam_l_ray, r_vector)) == np.sign(np.cross(r_vector, cam_r_ray)) and np.dot(r_vector, camera.near_dir) >= 0:
 		final_pts.append(right)
-
-	if len(final_pts) == 0:
-		return None
 
 	#final wall bounds will be the left-most and right-most points
 	final_pts = np.array(final_pts)
