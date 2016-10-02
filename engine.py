@@ -3,6 +3,7 @@ import math
 import numpy as np
 
 from geometry import *
+#from geometry_c import *
 
 X = 0
 Y = 1
@@ -212,6 +213,9 @@ def clip_floor(corners, camera):
 	if point_in_rect(near_clip_r, ul, br):
 		final_pts.append(near_clip_r)
 
+	if len(final_pts) == 0:
+		return None
+
 	#sort points
 	final_pts = sort_cw(final_pts)
 
@@ -240,6 +244,9 @@ def clip_wall(edges, camera):
 	r_vector = right - camera.pos
 	if np.sign(np.cross(cam_l_ray, r_vector)) == np.sign(np.cross(r_vector, cam_r_ray)) and np.dot(r_vector, camera.near_dir) >= 0:
 		final_pts.append(right)
+
+	if len(final_pts) == 0:
+		return None
 
 	#final wall bounds will be the left-most and right-most points
 	final_pts = np.array(final_pts)
@@ -417,6 +424,8 @@ def get_tri_quads(tile_pts, camera):
 			normalize_projection_points(og_pts, camera)
 			proj_mid = intersect_segments(
 				trans_pts[1][0:2] - l_third[0:2], trans_pts[3][0:2] - r_third[0:2], trans_pts[4][0:2], trans_pts[5][0:2])
+			if proj_mid is None:
+				continue
 			tr_pts = np.array([
 				trans_pts[0],
 				trans_pts[3],
