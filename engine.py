@@ -33,8 +33,8 @@ class TileMap:
 	def set_tiles_from_palette(self, palette, tiles):
 		if len(tiles[0]) != self.width or len(tiles) != self.height:
 			return
-		for y in range(0, self.height):
-			for x in range(0, self.width):
+		for y in xrange(0, self.height):
+			for x in xrange(0, self.width):
 				self.tiles[y][x] = palette.get(tiles[y][x])
 
 	def get_tile(self, x, y):
@@ -83,7 +83,7 @@ class Camera:
 		self.near_dir = np.dot(rot, self.near_dir)
 		self.near_plane = np.dot(rot, self.near_plane)
 
-		for i in range(0, len(self.rays)):
+		for i in xrange(0, len(self.rays)):
 			self.rays[i] = np.dot(rot, self.rays[i])
 
 	def move_forward(self, distance):
@@ -110,7 +110,7 @@ class Camera:
 		rays = []
 		direc = np.array([(self.proj_width / 2) / np.tan(np.deg2rad(self.angle / 2)), 0])
 		unit_plane = np.array([0, 1])
-		for i in range(int(-self.proj_width / 2), int(self.proj_width / 2)):
+		for i in xrange(int(-self.proj_width / 2), int(self.proj_width / 2)):
 			plane_pt = direc + (unit_plane * i)
 			unit_ray = plane_pt / math.sqrt(plane_pt[0]**2 + plane_pt[1]**2)
 			rays.append(unit_ray)
