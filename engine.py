@@ -72,6 +72,15 @@ class Camera:
 		self.pos[1] = y
 		self.z = z
 
+	def move_by(self, dx, dy, dz):
+		self.pos[0] += dx
+		self.pos[1] += dy
+		self.z += dz
+
+	def move_forward(self, distance):
+		step = self.near_dir / self.near * distance
+		self.move_by(step[0], step[1], 0)
+
 	def rotate_to(self, angle):
 		rad = np.deg2rad(angle)
 		rot = np.array([
@@ -82,11 +91,6 @@ class Camera:
 		self.plane = np.dot(rot, self.plane)
 		self.near_dir = np.dot(rot, self.near_dir)
 		self.near_plane = np.dot(rot, self.near_plane)
-
-	def move_by(self, dx, dy, dz):
-		self.pos[0] += dx
-		self.pos[1] += dy
-		self.z += dz
 
 	def rotate_by(self, da):
 		rad = np.deg2rad(da)
@@ -99,10 +103,6 @@ class Camera:
 
 		for i in xrange(0, len(self.rays)):
 			self.rays[i] = np.dot(rot, self.rays[i])
-
-	def move_forward(self, distance):
-		step = self.near_dir / self.near * distance
-		self.move_by(step[0], step[1], 0)
 
 	def tilt_by(self, distance):
 		self.horizon_y += distance
