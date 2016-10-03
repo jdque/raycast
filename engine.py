@@ -50,6 +50,19 @@ class TileMap:
 
 class Camera:
 	def __init__(self):
+		self.pos = None
+		self.z = 0.
+		self.angle = 0.
+		self.near = 0.
+		self.far = 0.
+		self.proj_width = 0.
+		self.proj_height = 0.
+		self.aspect = 0.
+		self.horizon_y = 0.
+		self.near_dir = None
+		self.near_plane = None
+		self.rays = None
+
 		self.pos = np.array([0., 0.])
 		self.z = 0.
 		self.set_fov(90, 0, 100, 100, 100)
@@ -100,7 +113,7 @@ class Camera:
 		self.far = float(far)
 		self.proj_width = float(proj_width)
 		self.proj_height = float(proj_height)
-		self.aspect = self.proj_width / self.proj_height
+		self.aspect = float(self.proj_width / self.proj_height)
 		self.horizon_y = float(proj_height) / 2
 
 		self.near_dir = np.array([self.near, 0])
@@ -109,10 +122,10 @@ class Camera:
 
 	def generate_rays(self):
 		rays = []
-		direc = np.array([(self.proj_width / 2) / np.tan(np.deg2rad(self.angle / 2)), 0])
+		dir_vec = np.array([(self.proj_width / 2) / np.tan(np.deg2rad(self.angle / 2)), 0])
 		unit_plane = np.array([0, 1])
 		for i in xrange(int(-self.proj_width / 2), int(self.proj_width / 2)):
-			plane_pt = direc + (unit_plane * i)
+			plane_pt = dir_vec + (unit_plane * i)
 			unit_ray = plane_pt / math.sqrt(plane_pt[0]**2 + plane_pt[1]**2)
 			rays.append(unit_ray)
 		return np.array(rays)
