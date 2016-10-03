@@ -163,15 +163,25 @@ def normalize_projection_points(pts, camera):
 	pts[:,0:2] -= 0.5
 	pts[:,0:2] *= 2
 
+def round_down(number, multiple = 10):
+	return number - (number % multiple)
+
+def round_up(number, multiple = 10):
+	return number - (number % multiple) + multiple
+
+def round(number, multiple = 10):
+	rem = number % multiple
+	return (number - rem + multiple) if rem >= multiple / 2 else number - rem
+
 def clip_floor(corners, camera):
-	ul = corners[0]
-	ur = corners[1]
+	tl = corners[0]
+	tr = corners[1]
 	br = corners[2]
 	bl = corners[3]
 	edges = [
-		[ul, bl],
-		[ur, br],
-		[ul, ur],
+		[tl, bl],
+		[tr, br],
+		[tl, tr],
 		[bl, br]
 		]
 	cam_l_ray = camera.rays[0]
@@ -199,19 +209,19 @@ def clip_floor(corners, camera):
 	if len(final_pts) < 4:
 		for edge in edges:
 			pt = intersect_ray_segment(near_clip_l, cam_l_ray, edge[0], edge[1])
-			if pt is not None and point_in_rect(pt, ul, br):
+			if pt is not None and point_in_rect(pt, tl, br):
 				final_pts.append(pt)
 			pt = intersect_ray_segment(near_clip_r, cam_r_ray, edge[0], edge[1])
-			if pt is not None and point_in_rect(pt, ul, br):
+			if pt is not None and point_in_rect(pt, tl, br):
 				final_pts.append(pt)
 			pt = intersect_segments(edge[0], edge[1],near_clip_l, near_clip_r)
-			if pt is not None and point_in_rect(pt, ul, br):
+			if pt is not None and point_in_rect(pt, tl, br):
 				final_pts.append(pt)
 
 	#add endpoints of near clip plane if inside the tile
-	if point_in_rect(near_clip_l, ul, br):
+	if point_in_rect(near_clip_l, tl, br):
 		final_pts.append(near_clip_l)
-	if point_in_rect(near_clip_r, ul, br):
+	if point_in_rect(near_clip_r, tl, br):
 		final_pts.append(near_clip_r)
 
 	#sort points
@@ -282,6 +292,7 @@ def get_clipped_tile_points(tilemap, camera):
 
 			prev_z = wall_z
 
+			#skip processing if collision point is almost a tile corner
 			if (collision_int[X] + 1) % tile_size <= 1.0 and (collision_int[Y] + 1) % tile_size <= 1.0:
 				continue
 
@@ -290,35 +301,37 @@ def get_clipped_tile_points(tilemap, camera):
 				key = (tile_coords[X], tile_coords[Y])
 				if key not in used_tiles:
 					used_tiles.add(key)
-					#[ul, ur, br, bl]
-					corners = np.array([
-						[tile_coords[X] * tile_size, tile_coords[Y] * tile_size],
-						[tile_coords[X] * tile_size + tile_size, tile_coords[Y] * tile_size],
-						[tile_coords[X] * tile_size + tile_size, tile_coords[Y] * tile_size + tile_size],
-						[tile_coords[X] * tile_size, tile_coords[Y] * tile_size + tile_size]
+					#[tl, tr, br, bl]
+					l = round_down(collision[X], tile_size)
+					r = round_up(collision[X], tile_size)
+					t = round_down(collision[Y], tile_size)
+					b = round_up(collision[Y], tile_size)
+					rect = np.array([
+						[l, t], [r, t], [r, b], [l, b]
 						])
-					clip_pts = clip_floor(corners, camera)
-					floor_pts.append((clip_pts, [corners[0], corners[2]], tile, 0))
+					clip_pts = clip_floor(rect, camera)
+					floor_pts.append((clip_pts, [rect[0], rect[2]], tile, 0))
 
 			#wall
 			if render_wall:
 				key = (tile_coords[X], tile_coords[Y], side)
 				if key not in used_tiles and render_wall:
 					used_tiles.add(key)
-					if side == 0:
-						y = (collision_int[Y] + tile_size / 2 - (collision_int[Y] + tile_size / 2) % tile_size)
-						if collision_int[Y] % tile_size <= 1.0:
-							edges = np.array([[tile_coords[X] * tile_size + tile_size, y],[tile_coords[X] * tile_size, y]])
-						else:
-							edges = np.array([[tile_coords[X] * tile_size, y], [tile_coords[X] * tile_size + tile_size, y]])
-					else:
-						x = (collision_int[X] + tile_size / 2 - (collision_int[X] + tile_size / 2) % tile_size)
-						if collision_int[X] % tile_size <= 1.0:
-							edges = np.array([[x, tile_coords[Y] * tile_size], [x, tile_coords[Y] * tile_size + tile_size]])
-						else:
-							edges = np.array([[x, tile_coords[Y] * tile_size + tile_size], [x, tile_coords[Y] * tile_size]])
-					clip_pts = clip_wall(edges, camera)
-					wall_pts.append((clip_pts, [edges[0], edges[1]], tile, 1))
+					if side == 0:  #horizontal
+						y0 = y1 = round(collision[Y], tile_size)
+						x0 = round_down(collision[X], tile_size)
+						x1 = round_up(collision[X], tile_size)
+						if collision[Y] % tile_size == 0:  #bottom wall, flip x's
+							x0, x1 = x1, x0
+					else:  #vertical
+						x0 = x1 = round(collision[X], tile_size)
+						y0 = round_down(collision[Y], tile_size)
+						y1 = round_up(collision[Y], tile_size)
+						if collision[X] % tile_size == 0:  #right wall, flip y's
+							y0, y1 = y1, y0
+					segment = np.array([[x0, y0], [x1, y1]])
+					clip_pts = clip_wall(segment, camera)
+					wall_pts.append((clip_pts, [segment[0], segment[1]], tile, 1))
 
 	return floor_pts, wall_pts
 
