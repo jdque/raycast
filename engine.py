@@ -242,29 +242,23 @@ def clip_floor(corners, camera):
 
 	return final_pts
 
-def clip_wall(edges, camera):
-	left = edges[0]
-	right = edges[1]
+def clip_wall(segment, camera):
 	cam_l_ray = camera.rays[0]
 	cam_r_ray = camera.rays[-1]
-
 	final_pts = []
 
-	#add points where wall intersects field of vision bounds
-	pt = intersect_ray_segment(camera.pos, cam_l_ray, left, right)
-	if pt is not None:
-		final_pts.append(pt)
-	pt = intersect_ray_segment(camera.pos, cam_r_ray, left, right)
-	if pt is not None:
-		final_pts.append(pt)
+	#add points where wall intersects field of vision edges
+	for ray in (cam_l_ray, cam_r_ray):
+		pt = intersect_ray_segment(camera.pos, ray, segment[0], segment[1])
+		if pt is not None:
+			final_pts.append(pt)
 
 	#add wall endpoints if they're within field of vision bounds
-	l_vector = left - camera.pos
-	if np.sign(np.cross(cam_l_ray, l_vector)) == np.sign(np.cross(l_vector, cam_r_ray)) and np.dot(l_vector, camera.near_dir) >= 0:
-		final_pts.append(left)
-	r_vector = right - camera.pos
-	if np.sign(np.cross(cam_l_ray, r_vector)) == np.sign(np.cross(r_vector, cam_r_ray)) and np.dot(r_vector, camera.near_dir) >= 0:
-		final_pts.append(right)
+	for pt in segment:
+		vec = pt - camera.pos
+		if (np.sign(np.cross(cam_l_ray, vec)) == np.sign(np.cross(vec, cam_r_ray)) and  #point is within camera angle bounds
+			np.dot(vec, camera.near_dir) >= 0):  #point is within 180 degrees of camera direction
+			final_pts.append(pt)
 
 	#final wall bounds will be the left-most and right-most points
 	final_pts = np.array(final_pts)
