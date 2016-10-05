@@ -11,7 +11,11 @@ Z = 2
 W = 2
 H = 3
 
+TYPE_FLOOR = 0
+TYPE_WALL = 1
+
 Tile = namedtuple('Tile', ['kind', 'floor_height', 'floor_z', 'floor_tex', 'wall_tex'])
+Clip = namedtuple('Clip', ['type', 'points', 'bounds', 'tile'])
 
 class TilePalette:
 	def __init__(self):
@@ -313,7 +317,7 @@ def get_clipped_tile_points(tilemap, camera):
 						[l, t], [r, t], [r, b], [l, b]
 						])
 					clip_pts = clip_floor(rect, camera)
-					floor_pts.append((clip_pts, [rect[0], rect[2]], tile, 0))
+					floor_pts.append(Clip(TYPE_FLOOR, clip_pts, [rect[0], rect[2]], tile))
 
 			#wall
 			if render_wall:
@@ -334,23 +338,24 @@ def get_clipped_tile_points(tilemap, camera):
 							y0, y1 = y1, y0
 					segment = np.array([[x0, y0], [x1, y1]])
 					clip_pts = clip_wall(segment, camera)
-					wall_pts.append((clip_pts, [segment[0], segment[1]], tile, 1))
+					wall_pts.append(Clip(TYPE_WALL, clip_pts, [segment[0], segment[1]], tile))
 
 	return floor_pts, wall_pts
 
-def get_tri_quads(tile_pts, camera):
+def get_tri_quads(clips, camera):
 	final_quads = []
-	for tile_pt in tile_pts:
-		tile = tile_pt[2]
-		surface_type = tile_pt[3]
-		if surface_type == 0: #floor
-			tile_x = tile_pt[1][0][0]
-			tile_y = tile_pt[1][0][1]
-			recp_tile_w = 1. / (tile_pt[1][1][0] - tile_pt[1][0][0])
-			recp_tile_h = 1. / (tile_pt[1][1][1] - tile_pt[1][0][1])
+	for clip in clips:
+		tile = clip.tile
+		surface_type = clip.type
+		if surface_type == TYPE_FLOOR:
+			tile_x = clip.bounds[0][0]
+			tile_y = clip.bounds[0][1]
+			recp_tile_size = 1. / (clip.bounds[1] - clip.bounds[0])
+			recp_tile_w = recp_tile_size[0]
+			recp_tile_h = recp_tile_size[1]
 
 			tri_quads = []
-			tris = triangulate(tile_pt[0])
+			tris = triangulate(clip.points)
 			for tri in tris:
 				mid_pt = np.average(tri, axis=0)
 				tri_quads.append([tri[0], tri[1], tri[2], mid_pt])
@@ -382,14 +387,19 @@ def get_tri_quads(tile_pts, camera):
 					])
 
 				final_quads.append((og_pts, trans_pts, trans_mid_pt, offsets, tile, surface_type))
-		elif surface_type == 1: #wall
-			#temp - append tri midpoints
-			clip_w = abs(tile_pt[0][1] - tile_pt[0][0])
-			tile_pt[0].append(tile_pt[0][0] + clip_w * 1/3.)
-			tile_pt[0].append(tile_pt[0][1] - clip_w * 1/3.)
+		elif surface_type == TYPE_WALL:
+			left_pt = clip.points[0]
+			right_pt = clip.points[1]
 
+			#temp - append tri midpoints
+			# o-----------o  ->  o---o---o---o
+			clip_w = abs(right_pt - left_pt)
+			clip.points.append(left_pt + clip_w * 1/3.)
+			clip.points.append(right_pt - clip_w * 1/3.)
+
+			#convert the wall line segment into a 2D surface by extruding its height based on the tile's z position/height
 			trans_pts = [] #[ul, bl, ur, br]
-			for pt in tile_pt[0]:
+			for pt in clip.points:
 				#top
 				top_pt = project_point(pt, tile.floor_z + tile.floor_height, camera)
 				trans_pts.append(top_pt)
@@ -400,9 +410,9 @@ def get_tri_quads(tile_pts, camera):
 			normalize_projection_points(trans_pts, camera)
 
 			#get offsets relative to tile width
-			recp_tile_w = 1. / np.linalg.norm(tile_pt[1][1] - tile_pt[1][0])
-			offset_l = np.linalg.norm(tile_pt[0][0] - tile_pt[1][0]) * recp_tile_w
-			offset_r = np.linalg.norm(tile_pt[0][1] - tile_pt[1][0]) * recp_tile_w
+			recp_tile_w = 1. / np.linalg.norm(clip.bounds[1] - clip.bounds[0])
+			offset_l = np.linalg.norm(left_pt - clip.bounds[0]) * recp_tile_w
+			offset_r = np.linalg.norm(right_pt - clip.bounds[0]) * recp_tile_w
 
 			"""
 			-------
@@ -413,7 +423,7 @@ def get_tri_quads(tile_pts, camera):
 			|    \|
 			-------
 			"""
-			w = np.linalg.norm(tile_pt[0][1] - tile_pt[0][0])
+			w = np.linalg.norm(right_pt - left_pt)
 			o_l = camera.proj_width / 2. - w / 2.
 			o_r = camera.proj_width / 2. + w / 2.
 			o_t = camera.proj_height / 2. - 32
