@@ -186,52 +186,48 @@ def round(number, multiple = 10):
 	rem = number % multiple
 	return (number - rem + multiple) if rem >= multiple / 2 else number - rem
 
-def clip_floor(corners, camera):
-	tl = corners[0]
-	tr = corners[1]
-	br = corners[2]
-	bl = corners[3]
-	edges = [
-		[tl, bl],
-		[tr, br],
-		[tl, tr],
-		[bl, br]
-		]
+def norm2(vector):
+	return np.sqrt(vector[0]**2 + vector[1]**2)
+
+def clip_floor(rect, camera):
+	tl = rect[0]
+	tr = rect[1]
+	br = rect[2]
+	bl = rect[3]
+	edges = [[tl, bl], [tr, br], [tl, tr], [bl, br]]
 	cam_l_ray = camera.rays[0]
 	cam_r_ray = camera.rays[-1]
-
 	near_clip_l = camera.pos + camera.near_dir - camera.near_plane
 	near_clip_r = camera.pos + camera.near_dir + camera.near_plane
-
 	final_pts = []
 
-	#filter points that are outside the view frustrum
-	for pt in corners:
-		if point_in_triangle(pt, near_clip_l, near_clip_r, camera.pos):
+	#add rect corner points that are within camera field of vision bounds
+	for pt in rect:
+		if point_in_triangle(pt, near_clip_l, near_clip_r, camera.pos):  #exclude points that are behind the near clip plane
 			continue
-		vector = pt - camera.pos
-		unit = vector / np.linalg.norm(vector)
-		if np.dot(cam_l_ray, unit) > 0.9999:
+		vec = pt - camera.pos
+		unit = vec / norm2(vec)
+		if (np.dot(cam_l_ray, unit) > (1 - 1e-4) or
+			np.dot(cam_r_ray, unit) > (1 - 1e-4)):
 			final_pts.append(pt)
-		elif np.dot(cam_r_ray, unit) > 0.9999:
-			final_pts.append(pt)
-		elif np.sign(np.cross(cam_l_ray, vector)) == np.sign(np.cross(vector, cam_r_ray)) and np.dot(vector, camera.near_dir) >= 0:
+		elif (np.sign(np.cross(cam_l_ray, vec)) == np.sign(np.cross(vec, cam_r_ray)) and
+			np.dot(vec, camera.near_dir) >= 0):
 			final_pts.append(pt)
 
-	#tile is partially in view frustrum, find intersection points with camera bounds
+	#rect is partially in view frustrum, find intersection points with camera bounds
 	if len(final_pts) < 4:
 		for edge in edges:
 			pt = intersect_ray_segment(near_clip_l, cam_l_ray, edge[0], edge[1])
-			if pt is not None and point_in_rect(pt, tl, br):
+			if pt is not None:
 				final_pts.append(pt)
 			pt = intersect_ray_segment(near_clip_r, cam_r_ray, edge[0], edge[1])
-			if pt is not None and point_in_rect(pt, tl, br):
+			if pt is not None:
 				final_pts.append(pt)
-			pt = intersect_segments(edge[0], edge[1],near_clip_l, near_clip_r)
+			pt = intersect_segments(edge[0], edge[1], near_clip_l, near_clip_r)
 			if pt is not None and point_in_rect(pt, tl, br):
 				final_pts.append(pt)
 
-	#add endpoints of near clip plane if inside the tile
+	#add endpoints of near clip plane if inside the rect
 	if point_in_rect(near_clip_l, tl, br):
 		final_pts.append(near_clip_l)
 	if point_in_rect(near_clip_r, tl, br):
