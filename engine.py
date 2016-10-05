@@ -137,39 +137,39 @@ class Camera:
 def project_point(pt, z, camera):
 	#x
 	vector = pt - camera.pos
-	if abs(1 - np.dot(vector, camera.near_dir) / (np.linalg.norm(vector) * camera.near)) < 1e-10:
-		proj_len = np.linalg.norm(vector)
-		x = np.linalg.norm(camera.near_plane)
+	if abs(1 - np.dot(vector, camera.near_dir) / (norm2(vector) * camera.near)) < 1e-10:
+		proj_len = norm2(vector)
+		x = norm2(camera.near_plane)
 	else:
 		proj = camera.near_dir * (np.dot(vector, camera.near_dir) / np.dot(camera.near_dir, camera.near_dir))
 		rej = vector - proj
-		proj_len = np.linalg.norm(proj)
-		rej_len = np.linalg.norm(rej)
+		proj_len = norm2(proj)
+		rej_len = norm2(rej)
 		scaled_rej_len = camera.near / proj_len * rej_len
 		scaled_rej = rej / rej_len * scaled_rej_len
 		x_sign = np.sign(np.dot((camera.near_plane + scaled_rej), camera.near_plane))
-		x = x_sign * np.linalg.norm(camera.near_plane + scaled_rej)
+		x = x_sign * norm2(camera.near_plane + scaled_rej)
 
 	#y
 	vector = np.array([proj_len, camera.z - z])
 	ndir = np.array([camera.near, 0])
-	nplane = np.array([0, np.linalg.norm(camera.near_plane)])
-	if abs(1 - np.dot(vector, ndir) / (np.linalg.norm(vector) * camera.near)) < 1e-10:
-		y = np.linalg.norm(nplane)
+	nplane = np.array([0, norm2(camera.near_plane)])
+	if abs(1 - np.dot(vector, ndir) / (norm2(vector) * camera.near)) < 1e-10:
+		y = norm2(nplane)
 	else:
 		proj = ndir * (np.dot(vector, ndir) / np.dot(ndir, ndir))
 		rej = vector - proj
-		proj_len = np.linalg.norm(proj)
-		rej_len = np.linalg.norm(rej)
-		scaled_rej_len = np.linalg.norm(ndir) / proj_len * rej_len
+		proj_len = norm2(proj)
+		rej_len = norm2(rej)
+		scaled_rej_len = norm2(ndir) / proj_len * rej_len
 		scaled_rej = rej / rej_len * scaled_rej_len
 		y_sign = np.sign(np.dot((nplane + scaled_rej), nplane))
-		y = y_sign * np.linalg.norm(nplane + scaled_rej)
+		y = y_sign * norm2(nplane + scaled_rej)
 
 	#z
 	vector = pt - camera.pos
 	proj = camera.near_dir * (np.dot(vector, camera.near_dir) / np.dot(camera.near_dir, camera.near_dir))
-	z = np.linalg.norm(proj) / (camera.far - camera.near)
+	z = norm2(proj) / (camera.far - camera.near)
 
 	return [x * (camera.proj_width / camera.near),
 			y * (camera.proj_height / camera.near) * camera.aspect - camera.horizon_y,
@@ -410,9 +410,9 @@ def get_tri_quads(clips, camera):
 			normalize_projection_points(trans_pts, camera)
 
 			#get offsets relative to tile width
-			recp_tile_w = 1. / np.linalg.norm(clip.bounds[1] - clip.bounds[0])
-			offset_l = np.linalg.norm(left_pt - clip.bounds[0]) * recp_tile_w
-			offset_r = np.linalg.norm(right_pt - clip.bounds[0]) * recp_tile_w
+			recp_tile_w = 1. / norm2(clip.bounds[1] - clip.bounds[0])
+			offset_l = norm2(left_pt - clip.bounds[0]) * recp_tile_w
+			offset_r = norm2(right_pt - clip.bounds[0]) * recp_tile_w
 
 			"""
 			-------
@@ -423,7 +423,7 @@ def get_tri_quads(clips, camera):
 			|    \|
 			-------
 			"""
-			w = np.linalg.norm(right_pt - left_pt)
+			w = norm2(right_pt - left_pt)
 			o_l = camera.proj_width / 2. - w / 2.
 			o_r = camera.proj_width / 2. + w / 2.
 			o_t = camera.proj_height / 2. - 32
