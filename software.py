@@ -5,6 +5,7 @@ sys.path.append("C:\\dev\\raycast")
 import sdl2
 import sdl2.ext
 import sdl2.sdlimage
+import timeit
 
 from engine import *
 
@@ -48,7 +49,7 @@ def render_border(plane):
 def render_scan(camera, tilemap):
 	floor_pts, wall_pts = get_clipped_tile_points(tilemap, camera)
 	for floor_pt in floor_pts:
-		tris = triangulate(floor_pt[0])
+		tris = triangulate(floor_pt.points)
 		for tri in tris:
 			renderer.draw_line((int(tri[0][X]), int(tri[0][Y]), int(tri[1][X]), int(tri[1][Y])), 0x8000FFFF)
 			renderer.draw_line((int(tri[0][X]), int(tri[0][Y]), int(tri[2][X]), int(tri[2][Y])), 0x8000FFFF)
@@ -56,7 +57,7 @@ def render_scan(camera, tilemap):
 			mid = np.average(tri[0:3], axis=0)
 			renderer.fill((int(mid[X]) - 2, int(mid[Y]) - 2, 4, 4), 0x8000FFFF)
 	for wall_pt in wall_pts:
-		renderer.draw_line((int(wall_pt[0][0][X]), int(wall_pt[0][0][Y]), int(wall_pt[0][1][X]), int(wall_pt[0][1][Y])), 0xFFFF00FF)
+		renderer.draw_line((int(wall_pt.points[0][X]), int(wall_pt.points[0][Y]), int(wall_pt.points[1][X]), int(wall_pt.points[1][Y])), 0xFFFF00FF)
 
 	quads = get_tri_quads(floor_pts + wall_pts, camera)
 	for quad in quads:
@@ -143,4 +144,38 @@ surface = window.get_surface()
 renderer = sdl2.ext.Renderer(surface, flags=sdl2.SDL_RENDERER_ACCELERATED)
 render_plane = (464, 0, 960, 640)
 
+def run_test():
+	palette = TilePalette()
+	palette.add(0, Tile(0, 0, 0, 8, 2))
+	palette.add(1, Tile(1, 64, 0, 8, 2))
+	palette.add(2, Tile(1, 0, -64, 8, 7))
+	palette.add(3, Tile(1, 32, 0, 8, 7))
+	palette.add(4, Tile(1, 192, -64, 8, 2))
+	palette.add(5, Tile(1, 64, -64, 8, 2))
+
+	tilemap = TileMap(7, 7, 64)
+	tilemap.set_tiles_from_palette(palette,
+	   [[1,1,1,1,1,1,1],
+		[1,0,3,4,4,0,1],
+		[1,3,5,2,2,5,1],
+		[1,0,5,2,2,5,1],
+		[1,0,0,5,5,0,1],
+		[1,0,0,0,0,0,1],
+		[1,1,1,1,1,1,1]])
+
+	camera = Camera()
+	camera.move_to(224, 288, 32)
+	camera.set_fov(60, 32, 1000, 480, 320)
+
+	def do():
+		#for i in r:
+		#	dda(pos, ray, 64)
+		#intersect_segments(a1, a2, b1, b2)
+		floor_pts, wall_pts = get_clipped_tile_points(tilemap, camera)
+		get_tri_quads(floor_pts + wall_pts, camera)
+
+	print timeit.timeit(do, number=100)
+	#print timeit.timeit(do2, number=30)
+
 run()
+#run_test()
