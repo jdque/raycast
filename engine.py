@@ -234,6 +234,11 @@ def normalize_projection_points(pts, camera):
 	pts[:,0:2] -= 0.5
 	pts[:,0:2] *= 2
 
+def normalize_geoms(geoms, camera):
+	geoms[:,:,0:2] /= [camera.proj_width, camera.proj_height]
+	geoms[:,:,0:2] -= 0.5
+	geoms[:,:,0:2] *= 2
+
 def round_down(number, multiple = 10):
 	return number - (number % multiple)
 
@@ -399,18 +404,14 @@ def get_clipped_tile_points(tilemap, camera):
 	return floor_pts, wall_pts
 
 def get_tri_quads(clips, camera):
-	final_quads = []
 	view_center = np.array([camera.proj_width / 2, camera.proj_height / 2])
+	all_tri_quads = []
+	all_view_quads = []
+	final_quads = []
 
 	for clip in clips:
 		tile = clip.tile
 		surface_type = clip.type
-		if surface_type == TYPE_FLOOR:
-			tile_origin = clip.bounds[0]
-			tile_size = clip.bounds[1] - clip.bounds[0]
-		elif surface_type == TYPE_WALL:
-			tile_origin = clip.bounds[0]
-			tile_size = np.array([norm2(clip.bounds[1] - clip.bounds[0]), tile.floor_height])
 
 		#add z coordinate to clip points
 		if surface_type == TYPE_FLOOR:
@@ -424,35 +425,55 @@ def get_tri_quads(clips, camera):
 
 		#triangulate the 3D clip points
 		tris = triangulate(clip_points_3D)
+		if len(tris) == 0:
+			continue
 
-		for tri in tris:
-			#append the triangle midpoints as the 4th point to form a tri-quad
-			mid_pt = np.average(tri, axis=0)
-			tri_quad = np.array([tri[0], tri[1], tri[2], mid_pt])
+		#append the triangle midpoints as the 4th point to form a tri-quad
+		tri_quads = np.empty((len(tris), 4, 3))
+		tri_quads[:,0:3] = tris
+		tri_quads[:,3] = np.average(tri_quads[:,0:3], axis=1)
 
-			#rotate tri-quad onto the view (XY) plane, at original size
-			if surface_type is TYPE_FLOOR:
-				view_tri_quad = tri_quad[:,0:2]
-			elif surface_type is TYPE_WALL:
-				rot_mat = MATRIX_ROT_YZ_XY if tri_quad[0][X] == tri_quad[1][X] else MATRIX_ROT_XZ_XY
-				view_tri_quad = np.empty((4, 2))
-				for i in xrange(4):
-					view_tri_quad[i] = np.dot(rot_mat, tri_quad[i])[0:2]
-			d_mid = view_center - view_tri_quad[3]
-			orig_pts = np.empty((4, 3))
-			orig_pts[:,0:2] = view_tri_quad + d_mid
-			orig_pts[:,2] = 0
-			normalize_projection_points(orig_pts, camera)
+		#rotate tri-quad onto the viewport (XY) plane, at original size
+		if surface_type is TYPE_FLOOR:
+			view_tri_quads = tri_quads[:,:,0:2]
+		elif surface_type is TYPE_WALL:
+			rot_mat = MATRIX_ROT_YZ_XY if tri_quads[0][0][X] == tri_quads[0][1][X] else MATRIX_ROT_XZ_XY
+			view_tri_quads = np.dot(tri_quads, rot_mat.T)[:,:,0:2]
 
-			#project tri-quad onto the view (XY) plane
-			proj_pts = project_points(tri_quad, camera)
-			normalize_projection_points(proj_pts, camera)
-			proj_mid_pt = np.average(proj_pts[0:3], axis=0)
-			proj_pts[:,0:2] -= proj_mid_pt[0:2]
+		#normalized distance of tri-quad points from the tile's origin point
+		if surface_type == TYPE_FLOOR:
+			tile_origin = clip.bounds[0]
+			tile_size = clip.bounds[1] - clip.bounds[0]
+		elif surface_type == TYPE_WALL:
+			tile_origin = clip.bounds[0]
+			tile_size = np.array([norm2(clip.bounds[1] - clip.bounds[0]), tile.floor_height])
+		offsets = (view_tri_quads - tile_origin) / tile_size
 
-			#normalized distance of tri-quad points from the tile's origin point
-			offsets = (view_tri_quad - tile_origin) / tile_size
+		all_tri_quads += list(tri_quads)
+		all_view_quads += list(view_tri_quads)
+		final_quads += [[None, None, None, offset, tile, surface_type] for offset in offsets]
 
-			final_quads.append((orig_pts, proj_pts, proj_mid_pt, offsets, tile, surface_type))
+	if len(all_tri_quads) > 0:
+		#translate view tri-quads to the center of the viewport
+		view_quads_arr = np.array(all_view_quads)
+		d_mids = view_center - view_quads_arr[:,3]
+		orig_pts = np.empty((len(view_quads_arr), 4, 3))
+		orig_pts[:,:,0:2] = view_quads_arr + d_mids[:,None]
+		orig_pts[:,:,2] = 0
+		normalize_geoms(orig_pts, camera)
+
+		#project tri-quads onto the viewport
+		tri_quads_arr = np.array(all_tri_quads)
+		proj_pts = project_points(tri_quads_arr.reshape(len(tri_quads_arr) * 4, 3), camera)
+		proj_pts = proj_pts.reshape((len(tri_quads_arr), 4, 3))
+		normalize_geoms(proj_pts, camera)
+		proj_mid_pts = np.average(proj_pts[:,0:3], axis=1)
+		proj_pts[:,:,0] -= proj_mid_pts[:,0,None]
+		proj_pts[:,:,1] -= proj_mid_pts[:,1,None]
+
+		for i in xrange(len(final_quads)):
+			final_quads[i][0] = orig_pts[i]
+			final_quads[i][1] = proj_pts[i]
+			final_quads[i][2] = proj_mid_pts[i]
 
 	return final_quads
