@@ -321,13 +321,13 @@ def normalize_geoms(geoms, camera):
 	geoms[:,:,0:2] -= 0.5
 	geoms[:,:,0:2] *= 2
 
-def round_down(number, multiple = 10):
+def round_down(number, multiple = 1):
 	return number - (number % multiple)
 
-def round_up(number, multiple = 10):
+def round_up(number, multiple = 1):
 	return number - (number % multiple) + multiple
 
-def round_nearest(number, multiple = 10):
+def round_nearest(number, multiple = 1):
 	rem = number % multiple
 	return (number - rem + multiple) if rem >= multiple / 2 else number - rem
 
