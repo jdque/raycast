@@ -11,58 +11,141 @@ Z = 2
 W = 2
 H = 3
 
+LEFT = 0
+TOP = 1
+RIGHT = 2
+BOTTOM = 3
+
 TYPE_FLOOR = 0
 TYPE_WALL = 1
 
 MATRIX_ROT_YZ_XY = np.array([
 	[0, 1, 0],
 	[0, 0, 1],
-	[0, 0, 0]
+	[0, 0, 1]
 	])
 
 MATRIX_ROT_XZ_XY = np.array([
 	[1, 0, 0],
 	[0, 0, 1],
-	[0, 0, 0]
+	[0, 0, 1]
 	])
 
-Tile = namedtuple('Tile', ['kind', 'floor_height', 'floor_z', 'floor_tex', 'wall_tex'])
-Clip = namedtuple('Clip', ['type', 'points', 'bounds', 'tile'])
+Clip = namedtuple('Clip', [
+	'type',
+	'points',
+	'bounds',
+	'data'
+	])
 
-class TilePalette:
+class Palette:
 	def __init__(self):
 		self.palette = {}
 
-	def add(self, index, tile):
-		self.palette[str(index)] = tile
+	def add(self, id, tile):
+		self.palette[id] = tile
 
-	def get(self, index):
-		return self.palette[str(index)]
+	def get(self, id):
+		return self.palette[id]
 
+SimpleTile = namedtuple('SimpleTile', [
+	'floor_z',
+	'floor_height',
+	'floor_texture',
+	'wall_texture'
+	])
+
+Floor = namedtuple('Floor', [
+	'z',
+	'height',
+	'texture'
+	])
+
+Wall = namedtuple('Wall', [
+	'z',
+	'height',
+	'texture'
+	])
 
 class TileMap:
 	def __init__(self, width, height, size):
 		self.width = width
 		self.height = height
 		self.size = size
-		self.tiles = np.zeros([self.width, self.height], dtype=object)
+		self.floors = np.empty([self.height, self.width], dtype=object)
+		self.wall_groups = np.empty([self.height, self.width], dtype=tuple)
+
+	def set_floors_from_palette(self, palette, floors):
+		if len(floors[0]) != self.width or len(floors) != self.height:
+			return
+		for y in xrange(0, self.height):
+			for x in xrange(0, self.width):
+				self.floors[y,x] = palette.get(floors[y][x])
+
+	def set_wall_groups_from_palette(self, palette, wall_groups):
+		if len(wall_groups[0]) != self.width or len(wall_groups) != self.height:
+			return
+		for y in xrange(0, self.height):
+			for x in xrange(0, self.width):
+				self.wall_groups[y,x] = palette.get(wall_groups[y][x])
 
 	def set_tiles_from_palette(self, palette, tiles):
 		if len(tiles[0]) != self.width or len(tiles) != self.height:
 			return
 		for y in xrange(0, self.height):
 			for x in xrange(0, self.width):
-				self.tiles[y][x] = palette.get(tiles[y][x])
+				tile = palette.get(tiles[y][x])
+				self.floors[y,x] = Floor(tile.floor_z, tile.floor_height, tile.floor_texture)
+				self.wall_groups[y,x] = [Wall(tile.floor_z, tile.floor_height, tile.wall_texture)] * 4
 
-	def get_tile(self, x, y):
-		return self.tiles[y][x]
+	def get_floor(self, x, y):
+		return self.floors[y,x]
 
-	def get_tile_px(self, x, y):
-		tx = x / self.size
-		ty = y / self.size
-		if tx < 0 or tx >= self.width or ty < 0 or ty >= self.height:
+	def get_floor_px(self, px, py):
+		x = px / self.size
+		y = py / self.size
+		if x < 0 or x >= self.width or y < 0 or y >= self.height:
 			return None
-		return self.tiles[ty,tx]
+		return self.floors[y,x]
+
+	def get_walls_px(self, px, py):
+		tile_size = self.size
+		is_vert_wall = abs(px % tile_size - tile_size) <= 1 or abs(px % tile_size) <= 1
+		is_horz_wall = abs(py % tile_size - tile_size) <= 1 or abs(py % tile_size) <= 1
+		if not is_horz_wall and not is_vert_wall:
+			return [], []
+
+		walls = []
+		tile_refs = []
+
+		if is_horz_wall:
+			x = round_down(px, tile_size) / int(tile_size)
+			y = round_nearest(py, tile_size) / int(tile_size)
+			if x < self.width:
+				if y == 0:
+					walls += [self.wall_groups[y,x][TOP]]
+					tile_refs += [(x, y)]
+				elif y == self.height:
+					walls += [self.wall_groups[y-1,x][BOTTOM]]
+					tile_refs += [(x, y-1)]
+				else:
+					walls += [self.wall_groups[y-1,x][BOTTOM], self.wall_groups[y,x][TOP]]
+					tile_refs += [(x, y-1), (x, y)]
+		if is_vert_wall:
+			x = round_nearest(px, tile_size) / int(tile_size)
+			y = round_down(py, tile_size) / int(tile_size)
+			if y < self.height:
+				if x == 0:
+					walls += [self.wall_groups[y,x][LEFT]]
+					tile_refs += [(x, y)]
+				elif x == self.width:
+					walls += [self.wall_groups[y,x-1][RIGHT]]
+					tile_refs += [(x-1, y)]
+				else:
+					walls += [self.wall_groups[y,x-1][RIGHT], self.wall_groups[y,x][LEFT]]
+					tile_refs += [(x-1, y), (x, y)]
+
+		return walls, tile_refs
 
 class Camera:
 	def __init__(self):
@@ -103,8 +186,7 @@ class Camera:
 			[np.cos(rad), -np.sin(rad)],
 			[np.sin(rad), np.cos(rad)]
 		])
-		self.dir = np.dot(rot, self.dir)
-		self.plane = np.dot(rot, self.plane)
+		#TODO - this is wrong
 		self.near_dir = np.dot(rot, self.near_dir)
 		self.near_plane = np.dot(rot, self.near_plane)
 
@@ -142,7 +224,7 @@ class Camera:
 		unit_plane = np.array([0, 1])
 		for i in xrange(int(-self.proj_width / 2), int(self.proj_width / 2)):
 			plane_pt = dir_vec + (unit_plane * i)
-			unit_ray = plane_pt / math.sqrt(plane_pt[0]**2 + plane_pt[1]**2)
+			unit_ray = plane_pt / np.linalg.norm(plane_pt)
 			rays.append(unit_ray)
 		return np.array(rays)
 
@@ -245,7 +327,7 @@ def round_down(number, multiple = 10):
 def round_up(number, multiple = 10):
 	return number - (number % multiple) + multiple
 
-def round(number, multiple = 10):
+def round_nearest(number, multiple = 10):
 	rem = number % multiple
 	return (number - rem + multiple) if rem >= multiple / 2 else number - rem
 
@@ -330,40 +412,56 @@ def get_clipped_tile_points(tilemap, camera):
 	floor_pts = []
 	wall_pts = []
 	used_tiles = set()
-	tile_size = float(tilemap.size)
+	tile_size = tilemap.size
 	max_z = 64
+	min_z = -64
 
 	for ray in camera.rays:
-		stop = False
-		prev_z = None
-		occluded = False
-		for collision, side in dda(camera.pos, ray, tile_size):
+		stop_up = False
+		stop_down = False
+		prev_min_z = 0
+		prev_max_z = 0
+		prev_floor_z = 0
+		for collision, side in dda(camera.pos, ray, float(tile_size)):
 			collision_int = [int(collision[X]), int(collision[Y])]
-			tile = tilemap.get_tile_px(collision_int[X], collision_int[Y])
 
-			if tile is None or stop:
+			if (collision_int[X] >= tilemap.width * tilemap.size or collision_int[X] < 0 or
+				collision_int[Y] >= tilemap.height * tilemap.size or collision_int[Y] < 0):
 				break
 
-			tile_coords = [int(collision_int[X] / tile_size), int(collision_int[Y] / tile_size)]
-			wall_z = tile.floor_z + tile.floor_height
+			if stop_up and stop_down:
+				break
 
-			render_wall = True if wall_z > prev_z and prev_z is not None else False
-			render_floor = True if camera.z - wall_z > 0 and not occluded and wall_z < max_z else False
+			walls, wall_coords = tilemap.get_walls_px(collision_int[X], collision_int[Y])
+			render_walls = map(lambda w: ((w.z + w.height > prev_max_z and not stop_up) or (w.z + w.height > prev_floor_z)) and w.height > 0, walls)
 
-			if wall_z >= max_z:
-				stop = True
+			if len(walls) == 0:
+				wall_min_z = prev_min_z
+				wall_max_z = prev_max_z
+			else:
+				wall_min_z = min(map(lambda x: x.z, walls))
+				wall_max_z = max(map(lambda x: x.z + x.height, walls))
 
-			if wall_z - camera.z >= 0:
-				occluded = True
+			if wall_max_z >= max_z:
+				stop_up = True
 
-			prev_z = wall_z
+			if wall_min_z <= min_z:
+				stop_down = True
+
+			prev_max_z = wall_max_z
+			prev_min_z = wall_min_z
+
+			floor = tilemap.get_floor_px(collision_int[X], collision_int[Y])
+			render_floor = True if camera.z > wall_max_z and wall_max_z < max_z and floor.texture is not None else False
+			prev_floor_z = floor.z + floor.height
 
 			#skip processing if collision point is almost a tile corner
-			if (collision_int[X] + 1) % tile_size <= 1.0 and (collision_int[Y] + 1) % tile_size <= 1.0:
+			if (abs(collision_int[X] % tile_size - tile_size) <= 1 or abs(collision_int[X] % tile_size) <= 1) and (abs(collision_int[Y] % tile_size - tile_size) <= 1 or abs(collision_int[Y] % tile_size) <= 1):
 				continue
 
 			#floor
 			if render_floor:
+				tile_coords = [collision_int[X] / tilemap.size, collision_int[Y] / tile_size]
 				key = (tile_coords[X], tile_coords[Y])
 				if key not in used_tiles:
 					used_tiles.add(key)
@@ -377,29 +475,30 @@ def get_clipped_tile_points(tilemap, camera):
 						])
 					clip_pts = clip_floor(rect, camera)
 					if len(clip_pts) > 0:
-						floor_pts.append(Clip(TYPE_FLOOR, clip_pts, [rect[0], rect[2]], tile))
+						floor_pts.append(Clip(TYPE_FLOOR, clip_pts, [rect[0], rect[2]], floor))
 
 			#wall
-			if render_wall:
-				key = (tile_coords[X], tile_coords[Y], side)
-				if key not in used_tiles and render_wall:
-					used_tiles.add(key)
-					if side == 0:  #horizontal
-						y0 = y1 = round(collision[Y], tile_size)
-						x0 = round_down(collision[X], tile_size)
-						x1 = round_up(collision[X], tile_size)
-						if collision[Y] % tile_size == 0:  #bottom wall, flip x's
-							x0, x1 = x1, x0
-					else:  #vertical
-						x0 = x1 = round(collision[X], tile_size)
-						y0 = round_down(collision[Y], tile_size)
-						y1 = round_up(collision[Y], tile_size)
-						if collision[X] % tile_size == 0:  #right wall, flip y's
-							y0, y1 = y1, y0
-					segment = np.array([[x0, y0], [x1, y1]])
-					clip_pts = clip_wall(segment, camera)
-					if len(clip_pts) > 0:
-						wall_pts.append(Clip(TYPE_WALL, clip_pts, [segment[0], segment[1]], tile))
+			if collision[X] != camera.pos[X] and collision[Y] != camera.pos[Y]:
+				for wall, wall_coord, render_wall in zip(walls, wall_coords, render_walls):
+					key = (wall_coord[X], wall_coord[Y], side)
+					if key not in used_tiles and render_wall:
+						used_tiles.add(key)
+						if side == 0:  #horizontal
+							y0 = y1 = round_nearest(collision[Y], tile_size)
+							x0 = round_down(collision[X], tile_size)
+							x1 = round_up(collision[X], tile_size)
+							# if collision[Y] % tile_size == 0:  #bottom wall, flip x's
+							# 	x0, x1 = x1, x0
+						else:  #vertical
+							x0 = x1 = round_nearest(collision[X], tile_size)
+							y1 = round_down(collision[Y], tile_size)
+							y0 = round_up(collision[Y], tile_size)
+							# if collision[X] % tile_size == 0:  #right wall, flip y's
+							# 	y0, y1 = y1, y0
+						segment = np.array([[x0, y0], [x1, y1]])
+						clip_pts = clip_wall(segment, camera)
+						if len(clip_pts) > 0:
+							wall_pts.append(Clip(TYPE_WALL, clip_pts, [segment[0], segment[1]], wall))
 
 	return floor_pts, wall_pts
 
@@ -410,18 +509,18 @@ def get_tri_quads(clips, camera):
 	final_quads = []
 
 	for clip in clips:
-		tile = clip.tile
 		surface_type = clip.type
+		data = clip.data
 
 		#add z coordinate to clip points
 		if surface_type == TYPE_FLOOR:
 			clip_points_3D = np.empty((len(clip.points), 3))
 			clip_points_3D[:,0:2] = clip.points
-			clip_points_3D[:,2] = tile.floor_z + tile.floor_height
+			clip_points_3D[:,2] = data.z + data.height
 		elif surface_type == TYPE_WALL:
 			clip_points_3D = np.empty((4, 3))
 			clip_points_3D[:,0:2] = (clip.points[0], clip.points[1], clip.points[1], clip.points[0])
-			clip_points_3D[:,2] = (tile.floor_z + tile.floor_height, tile.floor_z + tile.floor_height, tile.floor_z, tile.floor_z)
+			clip_points_3D[:,2] = (data.z + data.height, data.z + data.height, data.z, data.z)
 
 		#triangulate the 3D clip points
 		tris = triangulate(clip_points_3D)
@@ -446,12 +545,12 @@ def get_tri_quads(clips, camera):
 			tile_size = clip.bounds[1] - clip.bounds[0]
 		elif surface_type == TYPE_WALL:
 			tile_origin = clip.bounds[0]
-			tile_size = np.array([norm2(clip.bounds[1] - clip.bounds[0]), tile.floor_height])
+			tile_size = np.array([norm2(clip.bounds[1] - clip.bounds[0]), data.height])
 		offsets = (view_tri_quads - tile_origin) / tile_size
 
 		all_tri_quads += list(tri_quads)
 		all_view_quads += list(view_tri_quads)
-		final_quads += [[None, None, None, offset, tile, surface_type] for offset in offsets]
+		final_quads += [[None, None, None, offset, data.texture, surface_type] for offset in offsets]
 
 	if len(all_tri_quads) > 0:
 		#translate view tri-quads to the center of the viewport

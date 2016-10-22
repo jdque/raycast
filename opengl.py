@@ -40,20 +40,16 @@ def render_raycast(camera, tilemap):
 	quads = get_tri_quads(floor_pts + wall_pts, camera)
 
 	for quad in quads:
-		pos = quad[2]
 		o_tri = quad[0]
 		t_tri = quad[1]
+		pos = quad[2]
 		offset = quad[3]
+		texture = quad[4]
+		surface_type = quad[5]
 
 		o_tri[:,1] *= -1
 		t_tri[:,1] *= -1
 		pos[1] *= -1
-
-		surface_type = quad[5]
-		if surface_type == 0:
-			tile_tex = quad[4].floor_tex
-		elif surface_type == 1:
-			tile_tex = quad[4].wall_tex
 
 		area = np.linalg.det(t_tri[0:3])
 		if abs(area) <= 1e-10:
@@ -64,7 +60,7 @@ def render_raycast(camera, tilemap):
 			t_tri,
 			make_model_view_mat(pos[X], pos[Y], 0.0, 1.0, 1.0, 1.0),
 			offset,
-			tile_tex))
+			texture))
 
 	vertices = np.zeros(len(test_tris) * 9, dtype=np.float32)
 	for i in xrange(0, len(test_tris)):
@@ -95,23 +91,27 @@ def update_raycast():
 	elif key_states[sdl2.SDL_SCANCODE_D]:
 		camera.tilt_by(5)
 
-palette = TilePalette()
-palette.add(0, Tile(0, 0, 0, 8, 2))
-palette.add(1, Tile(1, 64, 0, 8, 2))
-palette.add(2, Tile(1, 0, -64, 8, 7))
-palette.add(3, Tile(1, 32, 0, 8, 7))
-palette.add(4, Tile(1, 192, -64, 8, 2))
-palette.add(5, Tile(1, 64, -64, 8, 2))
+palette = Palette()
+palette.add(0, SimpleTile(  0,   0, 8, 2))
+palette.add(1, SimpleTile(  0,  64, 8, 2))
+palette.add(2, SimpleTile(-64,   0, 8, 7))
+palette.add(3, SimpleTile(  0,  32, 8, 7))
+palette.add(4, SimpleTile(-64, 192, 8, 2))
+palette.add(5, SimpleTile(-64,  64, 8, 2))
 
-tilemap = TileMap(7, 7, 64)
+tilemap = TileMap(8, 8, 64)
 tilemap.set_tiles_from_palette(palette,
-   [[1,1,1,1,1,1,1],
-	[1,0,3,4,4,0,1],
-	[1,3,5,2,2,5,1],
-	[1,0,5,2,2,5,1],
-	[1,0,0,5,5,0,1],
-	[1,0,0,0,0,0,1],
-	[1,1,1,1,1,1,1]])
+   [[1,1,1,1,1,1,1,1],
+	[1,0,3,4,4,0,0,1],
+	[1,3,5,2,2,5,0,1],
+	[1,0,5,2,2,5,0,1],
+	[1,0,0,5,5,0,1,1],
+	[1,0,0,0,0,0,0,1],
+	[1,0,0,0,0,0,0,1],
+	[1,1,1,1,1,1,1,1]])
+#tilemap.wall_groups[1,4][RIGHT] = Wall(64, 64, 8)
+tilemap.wall_groups[2,4][RIGHT] = Wall(-64, 64, 2)
+tilemap.wall_groups[2,5][LEFT] = Wall(0, 32, 5)
 
 camera = Camera()
 camera.move_to(224, 288, 32)
@@ -151,15 +151,17 @@ def make_proj_mat(orig_pts, trans_pts):
     s/w, t/w = projected texture coordinates
 	"""
 
-	coeffs = []
-	rhs = []
-	for o, t in zip(orig_pts, trans_pts):
-		coeffs.append(np.array([o[0], o[1], 1, 0, 0, 0, -o[0] * t[0], -o[1] * t[0]]))
-		coeffs.append(np.array([0, 0, 0, o[0], o[1], 1, -o[0] * t[1], -o[1] * t[1]]))
-		rhs.append(t[0])
-		rhs.append(t[1])
+	coeffs = np.empty((len(orig_pts) * 2, 8))
+	rhs = np.empty((len(orig_pts) * 2))
+	for i in xrange(len(orig_pts)):
+		o = orig_pts[i]
+		t = trans_pts[i]
+		coeffs[i*2] = [o[0], o[1], 1, 0, 0, 0, -o[0] * t[0], -o[1] * t[0]]
+		coeffs[i*2+1] = [0, 0, 0, o[0], o[1], 1, -o[0] * t[1], -o[1] * t[1]]
+		rhs[i*2] = t[0]
+		rhs[i*2+1] = t[1]
 
-	X = np.linalg.solve(np.array(coeffs), np.array(rhs))
+	X = np.linalg.solve(coeffs, rhs)
 
 	proj_mat = np.array([
 		[X[0], X[1],  0., X[2]],
@@ -275,6 +277,8 @@ def init():
 		GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 1)
 		GL.glBindTexture(GL.GL_TEXTURE_2D, texture)
 		GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA, 64, 64, 0, GL.GL_BGRA, GL.GL_UNSIGNED_INT_8_8_8_8_REV, np.flipud(pixels.T).reshape(64*64))
+		GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_S, GL.GL_REPEAT);
+		GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_T, GL.GL_REPEAT);
 		GL.glGenerateMipmap(GL.GL_TEXTURE_2D)
 		GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
 

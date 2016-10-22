@@ -82,6 +82,7 @@ def triangulate(pts):
 	return tris
 
 def dda(origin, dir, step):
+	#TODO - try casting m to int
 	m = dir[1] / dir[0]
 
 	if dir[0] >= 0:
@@ -103,12 +104,12 @@ def dda(origin, dir, step):
 	delt_y = np.sqrt(step**2 + (1/m * step)**2)
 
 	if dx > 0:
-		side_x = abs(step - origin[0] % step) * delt_x / step + 1
+		side_x = abs(step - origin[0] % step) * delt_x / step
 	else:
 		side_x = abs(origin[0] % step) * delt_x / step + 1
 
 	if dy > 0:
-		side_y = abs(step - origin[1] % step) * delt_y / step + 1
+		side_y = abs(step - origin[1] % step) * delt_y / step
 	else:
 		side_y = abs(origin[1] % step) * delt_y / step + 1
 

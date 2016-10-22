@@ -19,8 +19,8 @@ def render_grid(tilemap):
 def render_tiles(tilemap):
 	for y in range(0, tilemap.height):
 		for x in range(0, tilemap.width):
-			tile = tilemap.get_tile(x, y)
-			z = tile.floor_z + tile.floor_height
+			tile = tilemap.get_floor(x, y)
+			z = tile.z + tile.height
 			if z == 0:
 				color = 0xFF000000
 			elif z > 0:
@@ -62,23 +62,24 @@ def render_scan(camera, tilemap):
 	quads = get_tri_quads(floor_pts + wall_pts, camera)
 	for quad in quads:
 		q = quad[1] + quad[2]
-		renderer.draw_line((int((q[0][X] * 0.5 + 0.5) * render_plane[W] + render_plane[X]), int((q[0][Y] * 0.5 + 0.5) * render_plane[H] + render_plane[Y]), int((q[1][X] * 0.5 + 0.5) * render_plane[W] + render_plane[X]), int((q[1][Y] * 0.5 + 0.5) * render_plane[H] + render_plane[Y])), 0xFFFFFFFF)
-		renderer.draw_line((int((q[0][X] * 0.5 + 0.5) * render_plane[W] + render_plane[X]), int((q[0][Y] * 0.5 + 0.5) * render_plane[H] + render_plane[Y]), int((q[2][X] * 0.5 + 0.5) * render_plane[W] + render_plane[X]), int((q[2][Y] * 0.5 + 0.5) * render_plane[H] + render_plane[Y])), 0xFFFFFFFF)
-		renderer.draw_line((int((q[1][X] * 0.5 + 0.5) * render_plane[W] + render_plane[X]), int((q[1][Y] * 0.5 + 0.5) * render_plane[H] + render_plane[Y]), int((q[2][X] * 0.5 + 0.5) * render_plane[W] + render_plane[X]), int((q[2][Y] * 0.5 + 0.5) * render_plane[H] + render_plane[Y])), 0xFFFFFFFF)
-		renderer.fill((int((q[3][X] * 0.5 + 0.5) * render_plane[W] + render_plane[X] - 2), int((q[3][Y] * 0.5 + 0.5) * render_plane[H] + render_plane[Y] - 2), 4, 4), 0xFFFFFFFF)
+		qt = (q * 0.5 + 0.5) * [render_plane[W], render_plane[H], 1] + [render_plane[X], render_plane[Y], 0]
+		renderer.draw_line((int(qt[0][X]), int(qt[0][Y]), int(qt[1][X]), int(qt[1][Y])), 0xFFFFFFFF)
+		renderer.draw_line((int(qt[0][X]), int(qt[0][Y]), int(qt[2][X]), int(qt[2][Y])), 0xFFFFFFFF)
+		renderer.draw_line((int(qt[1][X]), int(qt[1][Y]), int(qt[2][X]), int(qt[2][Y])), 0xFFFFFFFF)
+		renderer.fill((int(qt[3][X]) - 2, int(qt[3][Y]) - 2, 4, 4), 0xFFFFFFFF)
 
 def run():
 	# texture_surface = sdl2.ext.load_image("C:\\dev\\raycast\\textures.png")
 	# factory = sdl2.ext.SpriteFactory(sprite_type=sdl2.ext.TEXTURE, renderer=renderer)
 	# texture_sprite = factory.from_surface(texture_surface)
 
-	palette = TilePalette()
-	palette.add(0, Tile(0, 0, 0, 8, 2))
-	palette.add(1, Tile(1, 64, 0, 8, 2))
-	palette.add(2, Tile(1, 0, -64, 8, 7))
-	palette.add(3, Tile(1, 32, 0, 8, 7))
-	palette.add(4, Tile(1, 192, -64, 8, 2))
-	palette.add(5, Tile(1, 64, -64, 8, 2))
+	palette = Palette()
+	palette.add(0, SimpleTile(  0,   0, 8, 2))
+	palette.add(1, SimpleTile(  0,  64, 8, 2))
+	palette.add(2, SimpleTile(-64,   0, 8, 7))
+	palette.add(3, SimpleTile(  0,  32, 8, 7))
+	palette.add(4, SimpleTile(-64, 192, 8, 2))
+	palette.add(5, SimpleTile(-64,  64, 8, 2))
 
 	tilemap = TileMap(7, 7, 64)
 	tilemap.set_tiles_from_palette(palette,
@@ -86,7 +87,7 @@ def run():
 		[1,0,3,4,4,0,1],
 		[1,3,5,2,2,5,1],
 		[1,0,5,2,2,5,1],
-		[1,0,0,5,5,0,1],
+		[1,0,0,5,5,1,1],
 		[1,0,0,0,0,0,1],
 		[1,1,1,1,1,1,1]])
 
@@ -130,7 +131,7 @@ def run():
 		renderer.present()
 
 		delay = 1000 / 60 - (sdl2.timer.SDL_GetTicks() - now)
-		print 1000 / (sdl2.timer.SDL_GetTicks() - now)
+		#print 1000 / (sdl2.timer.SDL_GetTicks() - now)
 		if delay > 0:
 			sdl2.timer.SDL_Delay(delay)
 
