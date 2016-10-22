@@ -1,8 +1,5 @@
 import os
-os.environ["PYSDL2_DLL_PATH"] = "C:\\dev\\raycast"
-import sys
-sys.path.append("C:\\dev\\raycast")
-import numpy as np
+os.environ["PYSDL2_DLL_PATH"] = os.path.dirname(__file__)
 
 import sdl2
 import sdl2.ext
@@ -11,6 +8,7 @@ import sdl2.video
 import OpenGL.GL as GL
 from OpenGL.GL import shaders
 
+import numpy as np
 from engine import *
 
 window = None
@@ -19,7 +17,7 @@ renderer = None
 context = None
 shaderProgram = None
 textures = []
-running = True
+running = False
 
 test_tris = []
 
@@ -70,7 +68,7 @@ def render_raycast(camera, tilemap):
 	GL.glBufferData(GL.GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL.GL_DYNAMIC_DRAW)
 	GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
 
-def update_raycast():
+def update_raycast(camera, tilemap):
 	key_states = sdl2.keyboard.SDL_GetKeyboardState(None)
 	if key_states[sdl2.SDL_SCANCODE_ESCAPE]:
 		running = False
@@ -90,32 +88,6 @@ def update_raycast():
 		camera.tilt_by(-5)
 	elif key_states[sdl2.SDL_SCANCODE_D]:
 		camera.tilt_by(5)
-
-palette = Palette()
-palette.add(0, SimpleTile(  0,   0, 8, 2))
-palette.add(1, SimpleTile(  0,  64, 8, 2))
-palette.add(2, SimpleTile(-64,   0, 8, 7))
-palette.add(3, SimpleTile(  0,  32, 8, 7))
-palette.add(4, SimpleTile(-64, 192, 8, 2))
-palette.add(5, SimpleTile(-64,  64, 8, 2))
-
-tilemap = TileMap(8, 8, 64)
-tilemap.set_tiles_from_palette(palette,
-   [[1,1,1,1,1,1,1,1],
-	[1,0,3,4,4,0,0,1],
-	[1,3,5,2,2,5,0,1],
-	[1,0,5,2,2,5,0,1],
-	[1,0,0,5,5,0,1,1],
-	[1,0,0,0,0,0,0,1],
-	[1,0,0,0,0,0,0,1],
-	[1,1,1,1,1,1,1,1]])
-#tilemap.wall_groups[1,4][RIGHT] = Wall(64, 64, 8)
-tilemap.wall_groups[2,4][RIGHT] = Wall(-64, 64, 2)
-tilemap.wall_groups[2,5][LEFT] = Wall(0, 32, 5)
-
-camera = Camera()
-camera.move_to(224, 288, 32)
-camera.set_fov(60, 16, 1000, 120, 80)
 
 #------------------------------------------------------------------------------------------
 
@@ -263,7 +235,7 @@ def init():
 	VBO = GL.glGenBuffers(1)
 
 	#Load textures
-	texture_surface = sdl2.ext.load_image("C:\\dev\\raycast\\textures.png")
+	texture_surface = sdl2.ext.load_image(os.path.dirname(__file__) + os.path.sep + "textures.png")
 	sprite_factory = sdl2.ext.SpriteFactory(sprite_type=sdl2.ext.SOFTWARE, renderer=renderer)
 	test_sprite = sprite_factory.create_software_sprite((64, 64))
 	for i in range(8):
@@ -325,9 +297,10 @@ def render():
 
 	sdl2.SDL_GL_SwapWindow(window.window)
 
-def run():
-	init()
+def run_test():
+	global running
 
+	init()
 	test_tris.append(TriQuad(
 		np.array([
 			[-1.0,  1.0, 0.0],
@@ -371,11 +344,23 @@ def run():
 			]),
 		textures[3]))
 
+	running = True
+	while running:
+		update()
+		render()
+	window.hide()
+
+def run(tilemap, camera):
+	global running
+
+	init()
+
+	running = True
 	while running:
 		now = sdl2.timer.SDL_GetTicks()
 
 		update()
-		update_raycast()
+		update_raycast(camera, tilemap)
 		render_raycast(camera, tilemap)
 		render()
 
@@ -383,10 +368,7 @@ def run():
 		print 1000 / (sdl2.timer.SDL_GetTicks() - now)
 		if delay > 0:
 		 	sdl2.timer.SDL_Delay(delay)
-
 	window.hide()
 	#sdl2.SDL_GL_DeleteContext(context)
 	#sdl2.SDL_DestroyWindow(window.window)
 	#sdl2.SDL_Quit()
-
-run()

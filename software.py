@@ -1,5 +1,5 @@
 import os
-os.environ["PYSDL2_DLL_PATH"] = "C:\\dev\\raycast"
+os.environ["PYSDL2_DLL_PATH"] = os.path.dirname(__file__)
 import sys
 sys.path.append("C:\\dev\\raycast")
 import sdl2
@@ -8,6 +8,11 @@ import sdl2.sdlimage
 import timeit
 
 from engine import *
+
+window = sdl2.ext.Window("Hello World!", size=(1600, 960))
+surface = window.get_surface()
+renderer = sdl2.ext.Renderer(surface, flags=sdl2.SDL_RENDERER_ACCELERATED)
+render_plane = (464, 0, 960, 640)
 
 def render_grid(tilemap):
 	for x in range(0, tilemap.width):
@@ -68,32 +73,12 @@ def render_scan(camera, tilemap):
 		renderer.draw_line((int(qt[1][X]), int(qt[1][Y]), int(qt[2][X]), int(qt[2][Y])), 0xFFFFFFFF)
 		renderer.fill((int(qt[3][X]) - 2, int(qt[3][Y]) - 2, 4, 4), 0xFFFFFFFF)
 
-def run():
+def run(tilemap, camera):
 	# texture_surface = sdl2.ext.load_image("C:\\dev\\raycast\\textures.png")
 	# factory = sdl2.ext.SpriteFactory(sprite_type=sdl2.ext.TEXTURE, renderer=renderer)
 	# texture_sprite = factory.from_surface(texture_surface)
 
-	palette = Palette()
-	palette.add(0, SimpleTile(  0,   0, 8, 2))
-	palette.add(1, SimpleTile(  0,  64, 8, 2))
-	palette.add(2, SimpleTile(-64,   0, 8, 7))
-	palette.add(3, SimpleTile(  0,  32, 8, 7))
-	palette.add(4, SimpleTile(-64, 192, 8, 2))
-	palette.add(5, SimpleTile(-64,  64, 8, 2))
-
-	tilemap = TileMap(7, 7, 64)
-	tilemap.set_tiles_from_palette(palette,
-	   [[1,1,1,1,1,1,1],
-		[1,0,3,4,4,0,1],
-		[1,3,5,2,2,5,1],
-		[1,0,5,2,2,5,1],
-		[1,0,0,5,5,1,1],
-		[1,0,0,0,0,0,1],
-		[1,1,1,1,1,1,1]])
-
-	camera = Camera()
-	camera.move_to(224, 288, 32)
-	camera.set_fov(60, 32, 1000, 480, 320)
+	window.show()
 
 	running = True
 	while running:
@@ -139,12 +124,6 @@ def run():
 
 	window.hide()
 
-window = sdl2.ext.Window("Hello World!", size=(1600, 960))
-window.show()
-surface = window.get_surface()
-renderer = sdl2.ext.Renderer(surface, flags=sdl2.SDL_RENDERER_ACCELERATED)
-render_plane = (464, 0, 960, 640)
-
 def run_test():
 	palette = TilePalette()
 	palette.add(0, Tile(0, 0, 0, 8, 2))
@@ -177,6 +156,3 @@ def run_test():
 
 	print timeit.timeit(do, number=100)
 	#print timeit.timeit(do2, number=30)
-
-run()
-#run_test()
