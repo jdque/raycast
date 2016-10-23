@@ -1,10 +1,8 @@
 import os
-os.environ["PYSDL2_DLL_PATH"] = os.path.dirname(__file__)
-import sys
-sys.path.append("C:\\dev\\raycast")
+os.environ["PYSDL2_DLL_PATH"] = os.path.dirname(__file__) + os.path.sep + ".." + os.path.sep + "lib"
+
 import sdl2
 import sdl2.ext
-import sdl2.sdlimage
 import timeit
 
 from engine import *

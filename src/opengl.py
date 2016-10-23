@@ -1,5 +1,5 @@
 import os
-os.environ["PYSDL2_DLL_PATH"] = os.path.dirname(__file__)
+os.environ["PYSDL2_DLL_PATH"] = os.path.dirname(__file__) + os.path.sep + ".." + os.path.sep + "lib"
 
 import sdl2
 import sdl2.ext
@@ -235,7 +235,7 @@ def init():
 	VBO = GL.glGenBuffers(1)
 
 	#Load textures
-	texture_surface = sdl2.ext.load_image(os.path.dirname(__file__) + os.path.sep + "textures.png")
+	texture_surface = sdl2.ext.load_image(os.path.dirname(__file__) + os.path.sep + ".." + os.path.sep + "assets/textures.png")
 	sprite_factory = sdl2.ext.SpriteFactory(sprite_type=sdl2.ext.SOFTWARE, renderer=renderer)
 	test_sprite = sprite_factory.create_software_sprite((64, 64))
 	for i in range(8):

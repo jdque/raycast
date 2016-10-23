@@ -1,5 +1,6 @@
 import os
-os.environ["PYSDL2_DLL_PATH"] = "C:\\dev\\raycast"
+os.environ["PYSDL2_DLL_PATH"] = os.path.dirname(__file__) + os.path.sep + ".." + os.path.sep + "lib"
+
 import math
 import numpy as np
 import sdl2
@@ -491,7 +492,7 @@ camera.set_fov(60, 480)
 grid_color = sdl2.ext.Color(0, 255, 0, 255)
 floor_color = sdl2.ext.Color(0, 96, 96, 128)
 
-texture_surface = sdl2.ext.load_image("C:\\dev\\raycast\\textures.png")
+texture_surface = sdl2.ext.load_image(os.path.dirname(__file__) + os.path.sep + ".." + os.path.sep + "assets/textures.png")
 factory = sdl2.ext.SpriteFactory(sprite_type=sdl2.ext.TEXTURE, renderer=renderer)
 texture_sprite = factory.from_surface(texture_surface)
 
