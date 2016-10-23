@@ -1,5 +1,19 @@
 import functools
+import math
 import numpy as np
+
+def round_down(number, multiple = 1):
+	return number - (number % multiple)
+
+def round_up(number, multiple = 1):
+	return number - (number % multiple) + multiple
+
+def round_nearest(number, multiple = 1):
+	rem = number % multiple
+	return (number - rem + multiple) if rem >= multiple / 2 else number - rem
+
+def norm2(vector):
+	return math.sqrt(vector[0]**2 + vector[1]**2)
 
 def intersect_ray_segment(ray_o, ray_d, seg_a, seg_b):
 	v1 = ray_o - seg_a

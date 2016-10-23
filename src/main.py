@@ -1,5 +1,6 @@
 import sys
-from engine import *
+from tilemap import *
+from camera import Camera
 
 def run_software():
 	import software

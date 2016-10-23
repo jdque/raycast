@@ -9,7 +9,7 @@ import OpenGL.GL as GL
 from OpenGL.GL import shaders
 
 import numpy as np
-from engine import *
+from engine import get_clipped_tile_points, get_tri_quads
 
 window = None
 surface = None
@@ -56,7 +56,7 @@ def render_raycast(camera, tilemap):
 		test_tris.append(TriQuad(
 			o_tri,
 			t_tri,
-			make_model_view_mat(pos[X], pos[Y], 0.0, 1.0, 1.0, 1.0),
+			make_model_view_mat(pos[0], pos[1], 0.0, 1.0, 1.0, 1.0),
 			offset,
 			texture))
 

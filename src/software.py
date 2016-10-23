@@ -10,7 +10,7 @@ from engine import *
 window = sdl2.ext.Window("Hello World!", size=(1600, 960))
 surface = window.get_surface()
 renderer = sdl2.ext.Renderer(surface, flags=sdl2.SDL_RENDERER_ACCELERATED)
-render_plane = (464, 0, 960, 640)
+render_plane = (512, 0, 960, 640)
 
 def render_grid(tilemap):
 	for x in range(0, tilemap.width):
