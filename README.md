@@ -2,6 +2,8 @@
 
 Experimental 3D rendering project that combines old-school [raycasting](http://permadi.com/1996/05/ray-casting-tutorial-table-of-contents/) with GPU texture mapping.
 
+![](assets/sample.png?raw=true)
+
 #### Raycasting
 
 This project follows the raycasting process of projecting a 2D scene onto screen space. For each pixel column on the screen, a ray is cast outwards from the person's position on the 2D map. The distance the ray travels to the first wall it intersects determines the height at which to render that columnar slice on the screen (closer walls will appear taller, and vice versa). This method is simple and works great for rendering walls, but floors and ceilings end up requiring pixel-by-pixel rendering. Performance quickly suffers as a result, especially as screen resolution increases.
